@@ -1,48 +1,114 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GameState } from "../models/GameState";
+import { config } from "../config";
+import { ZodError } from "zod";
+import { aiResponseSchema } from "../models/schemas";
+import { AIResponse, GameState } from "../models/types";
+import { parseJsonWithCleanup } from "../utils/jsonParser";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ 
-    model: "gemini-3-pro-latest", // Или gemini-3-pro, когда выйдет
-    generationConfig: { responseMimeType: "application/json" } // Force JSON
-});
+export const SYSTEM_PROMPT =
+  "Ты — безумный суперкомпьютер AM. Твоя цель — мучить игрока. Описывай сцены жестоко и детально. Если игрок делает глупый выбор — наказывай его (снимай HP). Если умный — награждай. Всегда возвращай валидный JSON.";
 
-export const generateStoryStep = async (state: GameState, playerAction: string) => {
-    // Формируем контекст: кто герой, что у него в карманах
-    const context = `
-    CURRENT STATE:
-    HP: ${state.stats.hp}, Sanity: ${state.stats.sanity}
-    Inventory: ${state.inventory.map(i => i.name).join(", ")}
-    Tags: ${state.tags.join(", ")}
-    
-    PLAYER ACTION: "${playerAction}"
-    `;
+let cachedModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null =
+  null;
 
-    const prompt = `
-    Ты — ИИ "AM" из "I Have No Mouth...". Ты жестокий рассказчик.
-    Продолжи историю на основе действия игрока.
-    Верни ТОЛЬКО JSON следующего формата:
-    {
-      "narrative": "Текст истории...",
-      "choices": [{"text": "Вариант 1", "type": "action"}],
-      "statUpdates": {"hp": -5},
-      "tagsAdded": ["panicked"],
-      "imagePrompt": "описание для генератора картинок"
-    }
-    
-    ${context}
-    `;
+const getModel = () => {
+  if (!config.geminiApiKey) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
 
-    // Отправляем чат (с учетом истории, если нужно, или просто промпт)
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    
-    // Парсим JSON
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        console.error("AI returned bad JSON", text);
-        // Retry logic или возвращаем ошибку
-        throw new Error("AI Malfunction");
-    }
+  if (!cachedModel) {
+    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+    cachedModel = genAI.getGenerativeModel({
+      model: config.geminiModel,
+      systemInstruction: SYSTEM_PROMPT,
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.9,
+      },
+    });
+  }
+
+  return cachedModel;
 };
+
+const formatHistory = (state: GameState, maxEntries = 12) => {
+  const recent = state.history.slice(-maxEntries);
+  if (recent.length === 0) {
+    return "EMPTY";
+  }
+
+  return recent
+    .map((entry) =>
+      entry.role === "user" ? `USER: ${entry.parts}` : `AM: ${entry.parts}`,
+    )
+    .join("\n");
+};
+
+const formatState = (state: GameState) => {
+  const inventory =
+    state.inventory.length > 0
+      ? state.inventory.map((item) => item.name).join(", ")
+      : "EMPTY";
+  const tags = state.tags.length > 0 ? state.tags.join(", ") : "NONE";
+
+  return [
+    `HP: ${state.stats.hp}`,
+    `Sanity: ${state.stats.sanity}`,
+    `Str: ${state.stats.str}`,
+    `Int: ${state.stats.int}`,
+    `Dex: ${state.stats.dex}`,
+    `Inventory: ${inventory}`,
+    `Tags: ${tags}`,
+  ].join("\n");
+};
+
+const buildPrompt = (state: GameState, userAction: string) => `
+Ты продолжаешь интерактивную хоррор-историю. Ответ возвращай СТРОГО валидным JSON без Markdown и без комментариев.
+Формат ответа (никаких дополнительных ключей):
+{
+  "story_text": "описание сцены на русском",
+  "stat_updates": { "hp": -10, "sanity": -5, "str": 0, "int": 0, "dex": 0 },
+  "choices": ["вариант 1", "вариант 2", "вариант 3"],
+  "image_prompt": "english scene description"
+}
+
+Правила:
+- "stat_updates" — это ИЗМЕНЕНИЯ, а не абсолютные значения. Если изменений нет, верни пустой объект {}.
+- "choices" всегда ровно 3, короткие, в повелительном наклонении.
+- "image_prompt" только на английском, 1-2 предложения.
+- Никаких markdown-оберток, только JSON.
+
+HISTORY:
+${formatHistory(state)}
+
+CURRENT STATE:
+${formatState(state)}
+
+PLAYER ACTION: "${userAction}"
+`;
+
+export const generateStory = async (
+  currentState: GameState,
+  userAction: string,
+): Promise<AIResponse> => {
+  const prompt = buildPrompt(currentState, userAction);
+  const result = await getModel().generateContent(prompt);
+  const rawText = result.response.text();
+  const parsed = parseJsonWithCleanup<unknown>(rawText);
+
+  try {
+    return aiResponseSchema.parse(parsed);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new AIResponseValidationError("AI response failed validation");
+    }
+    throw error;
+  }
+};
+
+export class AIResponseValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AIResponseValidationError";
+  }
+}
