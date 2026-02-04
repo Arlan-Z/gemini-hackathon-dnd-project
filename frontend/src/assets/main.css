@@ -1,0 +1,166 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  body {
+    background: #000000;
+    color: #00ff41;
+    font-family: 'Fira Code', 'Courier New', monospace;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply border border-green-500/40 bg-black/80 shadow-[0_0_30px_rgba(0,255,65,0.15)] backdrop-blur;
+  }
+  .panel-title {
+    @apply text-[10px] uppercase tracking-[0.35em] text-green-300/70;
+  }
+  .stat-bar {
+    @apply h-2 w-full bg-green-500/10 border border-green-500/30;
+  }
+  .stat-bar > span {
+    @apply block h-full bg-green-400/70;
+  }
+  .tag {
+    @apply px-2 py-1 text-[10px] uppercase tracking-[0.2em] border border-green-500/40 text-green-300/80;
+  }
+  .image-frame {
+    @apply border border-green-500/40 bg-black/70 p-2 flex items-center justify-center relative;
+  }
+  .image-frame-img {
+    @apply max-h-[360px] w-full object-cover;
+  }
+  .story-box {
+    @apply border border-green-500/30 bg-black/70 p-3 min-h-[160px];
+  }
+  .story-text {
+    @apply text-sm leading-relaxed text-green-200/90;
+  }
+  .action-btn {
+    @apply px-4 py-2 text-[11px] uppercase tracking-[0.35em] border border-green-500/40 bg-black/80 text-green-200 hover:bg-green-500/10 transition disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .action-aggressive {
+    @apply border-red-500/60 text-red-300 hover:bg-red-500/20;
+  }
+  .action-stealth {
+    @apply border-cyan-500/60 text-cyan-200 hover:bg-cyan-500/20;
+  }
+  .action-neutral {
+    @apply border-green-500/60 text-green-200 hover:bg-green-500/20;
+  }
+  .inventory-item {
+    @apply w-full text-left border border-green-500/30 bg-black/60 px-3 py-2 hover:bg-green-500/10 transition;
+  }
+  .inventory-item-active {
+    @apply border-green-400/80 bg-green-500/10;
+  }
+  .gameover {
+    @apply text-2xl sm:text-3xl tracking-[0.5em] uppercase text-red-500/80 border border-red-500/50 px-6 py-4 bg-black/80;
+  }
+}
+
+@layer utilities {
+  .crt {
+    text-shadow: 0 0 8px rgba(0, 255, 65, 0.45);
+  }
+  .flicker {
+    animation: flicker 3s infinite;
+  }
+  .glitch {
+    animation: glitch 0.35s steps(2, end);
+  }
+  .typing::after {
+    content: '|';
+    margin-left: 2px;
+    animation: caret 0.9s steps(2, end) infinite;
+  }
+  .scanlines::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 255, 65, 0.03),
+      rgba(0, 255, 65, 0.03) 1px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0) 4px
+    );
+    mix-blend-mode: screen;
+    opacity: 0.35;
+    z-index: 50;
+  }
+  .scanlines::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 20% 20%, rgba(0, 255, 65, 0.05), transparent 45%),
+      radial-gradient(circle at 80% 30%, rgba(0, 255, 65, 0.04), transparent 55%),
+      radial-gradient(circle at 50% 80%, rgba(0, 255, 65, 0.03), transparent 60%);
+    opacity: 0.5;
+    z-index: 40;
+  }
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.92;
+  }
+  60% {
+    opacity: 0.75;
+  }
+  62% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.85;
+  }
+  80% {
+    opacity: 1;
+  }
+}
+
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+  20% {
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    transform: translate(2px, -2px);
+    filter: hue-rotate(20deg);
+  }
+  60% {
+    transform: translate(-1px, 1px);
+  }
+  80% {
+    transform: translate(1px, -1px);
+    filter: hue-rotate(-15deg);
+  }
+  100% {
+    transform: translate(0);
+  }
+}
+
+@keyframes caret {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
