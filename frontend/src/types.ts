@@ -7,5 +7,6 @@ export interface GameState {
   choices: Array<{ text: string; type: 'action' | 'aggressive' | 'stealth' }>
   image_prompt: string
   imageUrl?: string
+  imageBase64?: string
   isGameOver: boolean
 }

@@ -1,46 +1,20 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { config } from "../config";
 
 const FALLBACK_IMAGE_URL = "https://placehold.co/1024x1024/png?text=AM";
 
-let cachedImageModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null =
-  null;
+let cachedClient: GoogleGenAI | null = null;
 
-const getImageModel = () => {
-  if (!config.geminiApiKey || !config.geminiImageModel) {
+const getClient = () => {
+  if (!config.geminiApiKey) {
     return null;
   }
 
-  if (!cachedImageModel) {
-    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    cachedImageModel = genAI.getGenerativeModel({
-      model: config.geminiImageModel,
-      // Some image models expect response modalities instead of mimeType.
-      generationConfig: { responseModalities: ["IMAGE"] } as unknown as Record<
-        string,
-        unknown
-      >,
-    });
+  if (!cachedClient) {
+    cachedClient = new GoogleGenAI({ apiKey: config.geminiApiKey });
   }
 
-  return cachedImageModel;
-};
-
-const extractImageData = (response: unknown) => {
-  const responseAny = response as any;
-  const parts =
-    responseAny?.candidates?.[0]?.content?.parts ??
-    responseAny?.content?.parts ??
-    [];
-
-  for (const part of parts) {
-    const inlineData = part?.inlineData;
-    if (inlineData?.data && inlineData?.mimeType) {
-      return inlineData as { data: string; mimeType: string };
-    }
-  }
-
-  return null;
+  return cachedClient;
 };
 
 export const generateImage = async (prompt: string) => {
@@ -50,16 +24,26 @@ export const generateImage = async (prompt: string) => {
     ? `https://placehold.co/1024x1024/png?text=${encoded}`
     : FALLBACK_IMAGE_URL;
 
-  const model = getImageModel();
-  if (!model || !safePrompt) {
+  const client = getClient();
+  if (!client || !safePrompt) {
     return { imageUrl: fallback };
   }
 
   try {
-    const result = await model.generateContent(safePrompt);
-    const image = extractImageData(result.response);
-    if (image) {
-      return { imageUrl: `data:${image.mimeType};base64,${image.data}` };
+    const response = await client.models.generateImages({
+      model: config.geminiImageModel, // например: 'imagen-4.0-generate-001'
+      prompt: safePrompt,
+      config: {
+        numberOfImages: 1,
+      },
+    });
+
+    const firstImage = response?.generatedImages?.[0];
+
+    if (firstImage?.image?.imageBytes) {
+      return {
+        imageUrl: `data:image/png;base64,${firstImage.image.imageBytes}`,
+      };
     }
   } catch (error) {
     console.warn("Gemini image generation failed, using fallback.", error);

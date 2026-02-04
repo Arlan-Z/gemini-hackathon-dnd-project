@@ -6,6 +6,8 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:3000/api'
 
 type RawChoice = { text?: unknown; type?: unknown }
 
+type ImageValue = string | undefined
+
 const normalizeChoices = (choices: unknown) => {
   if (!Array.isArray(choices)) {
     return []
@@ -25,6 +27,28 @@ const normalizeChoices = (choices: unknown) => {
       return null
     })
     .filter((choice): choice is GameState['choices'][number] => Boolean(choice))
+}
+
+const normalizeImageUrl = (value: unknown): ImageValue => {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  if (/^data:image\//i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  const isBase64 = /^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length > 64
+  if (isBase64) {
+    return `data:image/png;base64,${trimmed}`
+  }
+
+  return trimmed
 }
 
 const normalizeGameState = (payload: any): GameState => {
@@ -47,6 +71,17 @@ const normalizeGameState = (payload: any): GameState => {
       }))
     : []
 
+  const rawImage =
+    payload?.imageUrl ??
+    payload?.image_url ??
+    payload?.imageBase64 ??
+    payload?.image_base64 ??
+    rawState.imageUrl ??
+    rawState.image_url ??
+    rawState.imageBase64 ??
+    rawState.image_base64 ??
+    undefined
+
   return {
     sessionId: payload?.sessionId ?? rawState.sessionId ?? '',
     stats,
@@ -55,8 +90,7 @@ const normalizeGameState = (payload: any): GameState => {
     story_text: payload?.story_text ?? rawState.story_text ?? '',
     choices: normalizeChoices(payload?.choices ?? rawState.choices),
     image_prompt: payload?.image_prompt ?? rawState.image_prompt ?? '',
-    imageUrl:
-      payload?.imageUrl ?? payload?.image_url ?? rawState.imageUrl ?? rawState.image_url ?? undefined,
+    imageUrl: normalizeImageUrl(rawImage),
     isGameOver: Boolean(rawState.isGameOver ?? payload?.isGameOver)
   }
 }
