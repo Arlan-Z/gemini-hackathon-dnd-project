@@ -81,6 +81,9 @@ const pushHistory = (state: GameState, entry: GameState["history"][number]) => {
   }
 };
 
+// Экспортируемая версия для использования в контроллере
+export const pushHistoryEntry = pushHistory;
+
 export const applyAiResponse = (
   state: GameState,
   aiResponse: AIResponse,

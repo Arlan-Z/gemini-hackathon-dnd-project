@@ -14,7 +14,7 @@ const resolvePort = () => {
 export const config = {
   port: resolvePort(),
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
-  geminiModel: process.env.GEMINI_MODEL ?? "gemini-3-pro-latest",
-  geminiImageModel: process.env.GEMINI_IMAGE_GEN_MODEL ?? "gemini-2.5-flash-image",
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+  geminiImageModel: process.env.GEMINI_IMAGE_GEN_MODEL ?? "imagen-3.0-generate-002",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
 };

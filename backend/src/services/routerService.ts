@@ -1,0 +1,220 @@
+/**
+ * Router Service - Классификация намерений игрока
+ * 
+ * Первый этап оркестрации: определяем тип действия игрока
+ * и направляем к соответствующему обработчику.
+ * 
+ * Это реализация паттерна "Router & Solvers" для robust systems.
+ */
+
+import { GoogleGenAI, Type } from "@google/genai";
+import { config } from "../config";
+import { GameState } from "../models/types";
+
+export type IntentType = 
+  | "exploration"      // Осмотр, исследование
+  | "combat"           // Бой, атака
+  | "dialogue"         // Разговор, взаимодействие с NPC
+  | "item_use"         // Использование предмета
+  | "self_harm"        // Самоповреждение, суицид
+  | "escape_attempt"   // Попытка побега
+  | "rest"             // Отдых, восстановление
+  | "unknown";         // Неопределенное действие
+
+export interface RouterResult {
+  intent: IntentType;
+  confidence: number;
+  reasoning: string;
+  suggestedDifficulty: "trivial" | "easy" | "medium" | "hard" | "deadly";
+  emotionalTone: "neutral" | "aggressive" | "fearful" | "desperate" | "cunning";
+}
+
+let genAI: GoogleGenAI | null = null;
+
+const getGenAI = (): GoogleGenAI => {
+  if (!config.geminiApiKey) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+  if (!genAI) {
+    genAI = new GoogleGenAI({ apiKey: config.geminiApiKey });
+  }
+  return genAI;
+};
+
+const ROUTER_SYSTEM_PROMPT = `You are an intent classifier for a horror RPG game. 
+Analyze the player's action and classify it into one of these categories:
+
+INTENT TYPES:
+- exploration: Looking around, examining objects, moving to new areas
+- combat: Attacking, fighting, using weapons aggressively
+- dialogue: Talking, asking questions, interacting with entities
+- item_use: Using an item from inventory
+- self_harm: Actions that would hurt the player themselves (drinking poison, jumping off, etc.)
+- escape_attempt: Trying to escape, run away, find exit
+- rest: Resting, waiting, doing nothing active
+- unknown: Cannot determine intent
+
+DIFFICULTY ASSESSMENT:
+- trivial: No risk, simple observation
+- easy: Minor risk, simple action
+- medium: Moderate risk, requires some skill
+- hard: High risk, dangerous action
+- deadly: Almost certain to cause severe harm or death
+
+EMOTIONAL TONE:
+- neutral: Calm, rational action
+- aggressive: Angry, violent intent
+- fearful: Scared, defensive action
+- desperate: Last resort, panic
+- cunning: Clever, strategic thinking
+
+Respond with JSON only.`;
+
+const routerFunctionDeclaration = {
+  name: "classify_intent",
+  description: "Classifies the player's intent and provides analysis",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      intent: {
+        type: Type.STRING,
+        description: "The classified intent type",
+      },
+      confidence: {
+        type: Type.NUMBER,
+        description: "Confidence score from 0.0 to 1.0",
+      },
+      reasoning: {
+        type: Type.STRING,
+        description: "Brief explanation of why this intent was chosen",
+      },
+      suggestedDifficulty: {
+        type: Type.STRING,
+        description: "Suggested difficulty level for this action",
+      },
+      emotionalTone: {
+        type: Type.STRING,
+        description: "Detected emotional tone of the action",
+      },
+    },
+    required: ["intent", "confidence", "reasoning", "suggestedDifficulty", "emotionalTone"],
+  },
+};
+
+/**
+ * Классифицирует намерение игрока
+ */
+export const classifyIntent = async (
+  state: GameState,
+  userAction: string
+): Promise<RouterResult> => {
+  const ai = getGenAI();
+
+  const contextInfo = `
+Player Stats: HP=${state.stats.hp}, Sanity=${state.stats.sanity}
+Inventory: ${state.inventory.map(i => i.name).join(", ") || "empty"}
+Active Tags: ${state.tags.join(", ") || "none"}
+Game Over: ${state.isGameOver}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash", // Быстрая модель для роутинга
+      contents: [{
+        role: "user",
+        parts: [{
+          text: `${contextInfo}\n\nPlayer Action: "${userAction}"\n\nClassify this action.`,
+        }],
+      }],
+      config: {
+        systemInstruction: ROUTER_SYSTEM_PROMPT,
+        temperature: 0.3, // Низкая температура для консистентности
+        tools: [{ functionDeclarations: [routerFunctionDeclaration] }],
+      },
+    });
+
+    const candidate = response.candidates?.[0];
+    const functionCall = candidate?.content?.parts?.find(p => p.functionCall)?.functionCall;
+
+    if (functionCall?.args) {
+      const args = functionCall.args as Record<string, unknown>;
+      return {
+        intent: (args.intent as IntentType) || "unknown",
+        confidence: (args.confidence as number) || 0.5,
+        reasoning: (args.reasoning as string) || "",
+        suggestedDifficulty: (args.suggestedDifficulty as RouterResult["suggestedDifficulty"]) || "medium",
+        emotionalTone: (args.emotionalTone as RouterResult["emotionalTone"]) || "neutral",
+      };
+    }
+
+    // Fallback если function calling не сработал
+    return {
+      intent: "unknown",
+      confidence: 0.5,
+      reasoning: "Could not classify intent",
+      suggestedDifficulty: "medium",
+      emotionalTone: "neutral",
+    };
+  } catch (error) {
+    console.error("[Router] Classification failed:", error);
+    return {
+      intent: "unknown",
+      confidence: 0.3,
+      reasoning: "Classification error",
+      suggestedDifficulty: "medium",
+      emotionalTone: "neutral",
+    };
+  }
+};
+
+/**
+ * Получает модификаторы для оркестратора на основе классификации
+ */
+export const getOrchestratorHints = (result: RouterResult): string => {
+  const hints: string[] = [];
+
+  // Подсказки по типу намерения
+  switch (result.intent) {
+    case "self_harm":
+      hints.push("CRITICAL: Player is attempting self-harm. Apply severe consequences immediately.");
+      hints.push("Use trigger_game_over if action is lethal.");
+      break;
+    case "combat":
+      hints.push("Combat scenario. Calculate damage based on player stats and enemy strength.");
+      hints.push("Consider player's STR and DEX for combat effectiveness.");
+      break;
+    case "escape_attempt":
+      hints.push("Player trying to escape. AM should mock this futile attempt.");
+      hints.push("Make escape seem possible but ultimately fail.");
+      break;
+    case "exploration":
+      hints.push("Exploration action. Describe environment in disturbing detail.");
+      hints.push("Consider revealing hidden horrors or useful items.");
+      break;
+    case "dialogue":
+      hints.push("Dialogue/interaction. AM can respond directly or through environment.");
+      hints.push("Use psychological manipulation.");
+      break;
+  }
+
+  // Подсказки по сложности
+  switch (result.suggestedDifficulty) {
+    case "deadly":
+      hints.push("DEADLY action - high chance of severe damage or death.");
+      break;
+    case "hard":
+      hints.push("Difficult action - expect significant negative consequences.");
+      break;
+    case "trivial":
+      hints.push("Simple action - minimal consequences, focus on atmosphere.");
+      break;
+  }
+
+  // Подсказки по эмоциональному тону
+  if (result.emotionalTone === "desperate") {
+    hints.push("Player seems desperate - AM should exploit this weakness.");
+  } else if (result.emotionalTone === "cunning") {
+    hints.push("Player being clever - AM should acknowledge but counter.");
+  }
+
+  return hints.join("\n");
+};
