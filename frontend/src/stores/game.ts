@@ -4,6 +4,63 @@ import type { GameState } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:3000/api'
 
+type RawChoice = { text?: unknown; type?: unknown }
+
+const normalizeChoices = (choices: unknown) => {
+  if (!Array.isArray(choices)) {
+    return []
+  }
+
+  return choices
+    .map((choice): GameState['choices'][number] | null => {
+      if (typeof choice === 'string') {
+        return { text: choice, type: 'action' }
+      }
+      if (choice && typeof choice === 'object') {
+        const raw = choice as RawChoice
+        const text = typeof raw.text === 'string' ? raw.text : ''
+        const type = raw.type === 'aggressive' || raw.type === 'stealth' ? raw.type : 'action'
+        return text ? { text, type } : null
+      }
+      return null
+    })
+    .filter((choice): choice is GameState['choices'][number] => Boolean(choice))
+}
+
+const normalizeGameState = (payload: any): GameState => {
+  const rawState = payload?.state ?? payload ?? {}
+  const rawStats = rawState.stats ?? {}
+
+  const stats = {
+    hp: rawStats.hp ?? 0,
+    sanity: rawStats.sanity ?? 0,
+    strength: rawStats.strength ?? rawStats.str ?? 0,
+    intelligence: rawStats.intelligence ?? rawStats.int ?? 0
+  }
+
+  const inventory = Array.isArray(rawState.inventory)
+    ? rawState.inventory.map((item: any) => ({
+        id: String(item?.id ?? ''),
+        name: String(item?.name ?? ''),
+        description: String(item?.description ?? item?.desc ?? ''),
+        imagePrompt: item?.imagePrompt ?? item?.image_prompt
+      }))
+    : []
+
+  return {
+    sessionId: payload?.sessionId ?? rawState.sessionId ?? '',
+    stats,
+    inventory,
+    tags: Array.isArray(rawState.tags) ? rawState.tags : [],
+    story_text: payload?.story_text ?? rawState.story_text ?? '',
+    choices: normalizeChoices(payload?.choices ?? rawState.choices),
+    image_prompt: payload?.image_prompt ?? rawState.image_prompt ?? '',
+    imageUrl:
+      payload?.imageUrl ?? payload?.image_url ?? rawState.imageUrl ?? rawState.image_url ?? undefined,
+    isGameOver: Boolean(rawState.isGameOver ?? payload?.isGameOver)
+  }
+}
+
 export const useGameStore = defineStore('game', () => {
   const gameState = ref<GameState | null>(null)
   const loading = ref(false)
@@ -24,9 +81,10 @@ export const useGameStore = defineStore('game', () => {
         throw new Error(message || response.statusText)
       }
 
-      const data = (await response.json()) as GameState
-      gameState.value = data
-      return data
+      const data = await response.json()
+      const normalized = normalizeGameState(data)
+      gameState.value = normalized
+      return normalized
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Unknown error'
       throw err
