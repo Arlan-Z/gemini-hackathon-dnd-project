@@ -2,7 +2,8 @@
   "name": "ihnmbims-dnd-game",
   "private": true,
   "scripts": {
-    "all": "concurrently \"npm run start --prefix backend\" \"npm run dev --prefix frontend\""
+    "all": "concurrently \"npm run start --prefix backend\" \"npm run dev --prefix frontend\"",
+    "install-all": "npm install && npm install --prefix backend && npm install --prefix frontend"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"
