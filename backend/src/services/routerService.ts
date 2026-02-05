@@ -68,7 +68,7 @@ EMOTIONAL TONE:
 - desperate: Last resort, panic
 - cunning: Clever, strategic thinking
 
-Respond with JSON only.`;
+You must respond exclusively by calling the classify_intent tool with appropriate arguments. Do not output raw JSON or natural-language text directly.`;
 
 const routerFunctionDeclaration = {
   name: "classify_intent",
