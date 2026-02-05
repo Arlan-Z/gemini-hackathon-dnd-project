@@ -95,7 +95,7 @@ export const executeInventoryAction = (
   if (typeof args.action !== "string" || !args.action.trim()) {
     return {
       success: false,
-      message: "Invalid or missing 'action' parameter. Must be a non-empty string ('add' or 'remove').",
+      message: "Invalid or missing 'action' parameter. Must be a non-empty, non-whitespace string ('add' or 'remove').",
     };
   }
   
@@ -105,7 +105,7 @@ export const executeInventoryAction = (
   if (typeof args.itemName !== "string" || !args.itemName.trim()) {
     return {
       success: false,
-      message: "Invalid or missing 'itemName' parameter. Must be a non-empty string.",
+      message: "Invalid or missing 'itemName' parameter. Must be a non-empty, non-whitespace string.",
     };
   }
   
