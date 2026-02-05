@@ -254,24 +254,26 @@ export const executeTriggerGameOver = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  const rawEndingType = args.endingType;
-  const rawDeathDescription = args.deathDescription;
-
-  if (
-    typeof rawEndingType !== "string" ||
-    rawEndingType.trim() === "" ||
-    typeof rawDeathDescription !== "string" ||
-    rawDeathDescription.trim() === ""
-  ) {
+  // Validate endingType parameter
+  const endingTypeValidation = validateNonEmptyString(args.endingType, "endingType");
+  if (!endingTypeValidation.valid) {
     return {
       success: false,
-      message:
-        "Invalid arguments for trigger_game_over: endingType and deathDescription must be non-empty strings.",
+      message: endingTypeValidation.error,
     };
   }
 
-  const endingType = rawEndingType.trim();
-  const deathDescription = rawDeathDescription.trim();
+  // Validate deathDescription parameter
+  const descValidation = validateNonEmptyString(args.deathDescription, "deathDescription");
+  if (!descValidation.valid) {
+    return {
+      success: false,
+      message: descValidation.error,
+    };
+  }
+
+  const endingType = endingTypeValidation.trimmed;
+  const deathDescription = descValidation.trimmed;
 
   ctx.state.isGameOver = true;
   ctx.gameOverTriggered = true;
@@ -291,17 +293,18 @@ export const executeGenerateSceneImage = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  const visualDescription = args.visualDescription;
   const style = (args.style as string) || "horror";
 
   // Validate visualDescription parameter
-  if (typeof visualDescription !== "string" || visualDescription.trim().length === 0) {
+  const descValidation = validateNonEmptyString(args.visualDescription, "visualDescription");
+  if (!descValidation.valid) {
     return {
       success: false,
-      message: "visualDescription must be a non-empty string to generate a scene image.",
-      data: { visualDescription },
+      message: descValidation.error,
     };
   }
+
+  const visualDescription = descValidation.trimmed;
 
   // Сохраняем промпт для последующей генерации
   ctx.imagePrompt = `${visualDescription}, ${style} style, cinematic lighting, detailed`;
