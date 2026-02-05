@@ -34,6 +34,22 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 /**
+ * Validates that a value is a non-empty, non-whitespace string
+ */
+const validateNonEmptyString = (
+  value: unknown,
+  paramName: string
+): { valid: false; error: string } | { valid: true; trimmed: string } => {
+  if (typeof value !== "string" || !value.trim()) {
+    return {
+      valid: false,
+      error: `Invalid or missing '${paramName}' parameter. Must be a non-empty, non-whitespace string.`,
+    };
+  }
+  return { valid: true, trimmed: value.trim() };
+};
+
+/**
  * Выполняет update_player_stats
  */
 export const executeUpdatePlayerStats = (
@@ -164,14 +180,15 @@ export const executeAddTag = (
   const { state } = ctx;
 
   // Validate required 'tag' parameter
-  if (typeof args.tag !== "string" || !args.tag.trim()) {
+  const tagValidation = validateNonEmptyString(args.tag, "tag");
+  if (!tagValidation.valid) {
     return {
       success: false,
-      message: "Invalid or missing 'tag' parameter. Must be a non-empty, non-whitespace string.",
+      message: tagValidation.error,
     };
   }
 
-  const tag = args.tag.trim();
+  const tag = tagValidation.trimmed;
   const reason = (args.reason as string) || "unknown";
 
   if (state.tags.includes(tag)) {
@@ -201,14 +218,15 @@ export const executeRemoveTag = (
   const { state } = ctx;
 
   // Validate required 'tag' parameter
-  if (typeof args.tag !== "string" || !args.tag.trim()) {
+  const tagValidation = validateNonEmptyString(args.tag, "tag");
+  if (!tagValidation.valid) {
     return {
       success: false,
-      message: "Invalid or missing 'tag' parameter. Must be a non-empty, non-whitespace string.",
+      message: tagValidation.error,
     };
   }
 
-  const tag = args.tag.trim();
+  const tag = tagValidation.trimmed;
   const reason = (args.reason as string) || "unknown";
 
   const index = state.tags.indexOf(tag);
