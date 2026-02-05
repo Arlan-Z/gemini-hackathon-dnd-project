@@ -46,10 +46,11 @@ This project implements a **Deterministic AI Orchestration Engine** using Google
 │  │  reason: "acid"}   │  │   │  Choices:                │
 │  ├────────────────────┤  │   │  1. ...                  │
 │  │ trigger_game_over  │  │   │  2. ...                  │
-│  │ {type: "suicide"}  │  │   │  3. ...                  │
+│  │ {endingType: "suicide",│  │   │  3. ...                  │
+│  │  deathDescription: "drank acid"}│  │   │                          │
 │  ├────────────────────┤  │   │                          │
 │  │ generate_scene_img │  │   │                          │
-│  │ {desc: "..."}      │  │   │                          │
+│  │ {visualDescription: "..."}│  │   │                          │
 │  └────────────────────┘  │   │                          │
 └──────────────────────────┘   └──────────────────────────┘
             │
