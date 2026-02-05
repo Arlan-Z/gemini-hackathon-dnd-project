@@ -64,10 +64,6 @@ router.post("/action", async (req, res, next) => {
     // Используем оркестратор вместо прямого вызова AI
     const orchestratorResponse = await processPlayerAction(state, action);
 
-    // Обновляем историю
-    pushHistoryEntry(state, { role: "user", parts: action });
-    pushHistoryEntry(state, { role: "model", parts: orchestratorResponse.storyText });
-
     // Генерируем изображение если есть промпт
     let imageUrl: string | null = null;
     if (orchestratorResponse.imagePrompt) {
@@ -82,7 +78,8 @@ router.post("/action", async (req, res, next) => {
     // Формируем stat_updates из tool calls для совместимости с фронтендом
     const statUpdates = extractStatUpdates(orchestratorResponse.toolCalls);
 
-    res.json({
+    // Prepare response object before updating history
+    const responsePayload = {
       sessionId,
       story_text: orchestratorResponse.storyText,
       stat_updates: statUpdates,
@@ -103,7 +100,13 @@ router.post("/action", async (req, res, next) => {
         isGameOver: orchestratorResponse.isGameOver,
         gameOverDescription: orchestratorResponse.gameOverDescription,
       },
-    });
+    };
+
+    // Only update history after successfully preparing the response
+    pushHistoryEntry(state, { role: "user", parts: action });
+    pushHistoryEntry(state, { role: "model", parts: orchestratorResponse.storyText });
+
+    res.json(responsePayload);
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: "Invalid request payload", issues: error.issues });
