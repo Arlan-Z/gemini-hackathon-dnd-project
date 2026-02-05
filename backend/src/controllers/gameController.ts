@@ -122,19 +122,23 @@ const extractStatUpdates = (
   toolCalls: Array<{
     toolName: string;
     args: Record<string, unknown>;
-    result: { success: boolean };
+    result: { success: boolean; appliedDelta?: Record<string, unknown> };
   }>
 ): Record<string, number> => {
   const updates: Record<string, number> = {};
 
   for (const call of toolCalls) {
     if (call.toolName === "update_player_stats" && call.result.success) {
-      const args = call.args;
-      if (typeof args.hp === "number") updates.hp = (updates.hp || 0) + args.hp;
-      if (typeof args.sanity === "number") updates.sanity = (updates.sanity || 0) + args.sanity;
-      if (typeof args.str === "number") updates.str = (updates.str || 0) + args.str;
-      if (typeof args.int === "number") updates.int = (updates.int || 0) + args.int;
-      if (typeof args.dex === "number") updates.dex = (updates.dex || 0) + args.dex;
+      const source =
+        call.result.appliedDelta && typeof call.result.appliedDelta === "object"
+          ? call.result.appliedDelta
+          : call.args;
+
+      if (typeof source.hp === "number") updates.hp = (updates.hp || 0) + source.hp;
+      if (typeof source.sanity === "number") updates.sanity = (updates.sanity || 0) + source.sanity;
+      if (typeof source.str === "number") updates.str = (updates.str || 0) + source.str;
+      if (typeof source.int === "number") updates.int = (updates.int || 0) + source.int;
+      if (typeof source.dex === "number") updates.dex = (updates.dex || 0) + source.dex;
     }
   }
 
