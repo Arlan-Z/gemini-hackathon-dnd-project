@@ -34,6 +34,22 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 /**
+ * Validates that a value is a non-empty, non-whitespace string
+ */
+const validateNonEmptyString = (
+  value: unknown,
+  paramName: string
+): { valid: false; error: string } | { valid: true; trimmed: string } => {
+  if (typeof value !== "string" || !value.trim()) {
+    return {
+      valid: false,
+      error: `Invalid or missing '${paramName}' parameter. Must be a non-empty, non-whitespace string.`,
+    };
+  }
+  return { valid: true, trimmed: value.trim() };
+};
+
+/**
  * Выполняет update_player_stats
  */
 export const executeUpdatePlayerStats = (
@@ -162,8 +178,18 @@ export const executeAddTag = (
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
-  const tag = args.tag as string;
-  const reason = args.reason as string || "unknown";
+
+  // Validate required 'tag' parameter
+  const tagValidation = validateNonEmptyString(args.tag, "tag");
+  if (!tagValidation.valid) {
+    return {
+      success: false,
+      message: tagValidation.error,
+    };
+  }
+
+  const tag = tagValidation.trimmed;
+  const reason = (args.reason as string) || "unknown";
 
   if (state.tags.includes(tag)) {
     return {
@@ -190,8 +216,18 @@ export const executeRemoveTag = (
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
-  const tag = args.tag as string;
-  const reason = args.reason as string || "unknown";
+
+  // Validate required 'tag' parameter
+  const tagValidation = validateNonEmptyString(args.tag, "tag");
+  if (!tagValidation.valid) {
+    return {
+      success: false,
+      message: tagValidation.error,
+    };
+  }
+
+  const tag = tagValidation.trimmed;
+  const reason = (args.reason as string) || "unknown";
 
   const index = state.tags.indexOf(tag);
   if (index === -1) {
@@ -218,8 +254,26 @@ export const executeTriggerGameOver = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  const endingType = args.endingType as string;
-  const deathDescription = args.deathDescription as string;
+  // Validate endingType parameter
+  const endingTypeValidation = validateNonEmptyString(args.endingType, "endingType");
+  if (!endingTypeValidation.valid) {
+    return {
+      success: false,
+      message: endingTypeValidation.error,
+    };
+  }
+
+  // Validate deathDescription parameter
+  const descValidation = validateNonEmptyString(args.deathDescription, "deathDescription");
+  if (!descValidation.valid) {
+    return {
+      success: false,
+      message: descValidation.error,
+    };
+  }
+
+  const endingType = endingTypeValidation.trimmed;
+  const deathDescription = descValidation.trimmed;
 
   ctx.state.isGameOver = true;
   ctx.gameOverTriggered = true;
@@ -239,8 +293,18 @@ export const executeGenerateSceneImage = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  const visualDescription = args.visualDescription as string;
   const style = (args.style as string) || "horror";
+
+  // Validate visualDescription parameter
+  const descValidation = validateNonEmptyString(args.visualDescription, "visualDescription");
+  if (!descValidation.valid) {
+    return {
+      success: false,
+      message: descValidation.error,
+    };
+  }
+
+  const visualDescription = descValidation.trimmed;
 
   // Сохраняем промпт для последующей генерации
   ctx.imagePrompt = `${visualDescription}, ${style} style, cinematic lighting, detailed`;

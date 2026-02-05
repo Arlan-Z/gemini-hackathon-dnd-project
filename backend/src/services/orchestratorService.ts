@@ -259,6 +259,13 @@ export const processPlayerAction = async (
     });
   }
 
+  if (iterations >= maxIterations) {
+    console.warn(
+      `[Orchestrator] Max iterations limit reached (${maxIterations}). ` +
+      `Stopping tool-calling loop and proceeding with current response.`
+    );
+  }
+
   // Извлекаем финальный текст
   const finalCandidate = response.candidates?.[0];
   const textParts = finalCandidate?.content?.parts?.filter(
@@ -359,7 +366,13 @@ const cleanStoryText = (text: string): string => {
   // Убираем возможные артефакты
   cleaned = cleaned
     .replace(/```[\s\S]*?```/g, "")
-    .replace(/\[.*?\]/g, "")
+    // Удаляем служебные теги в квадратных скобках (например, [CHOICE_1], [SYSTEM MESSAGE]),
+    // но не трогаем стилистический текст с маленькими буквами вроде [mechanical grinding sound].
+    // Паттерн [A-Z0-9 _-]{2,} соответствует любой комбинации заглавных букв, цифр, пробелов,
+    // подчёркиваний и дефисов длиной 2+ символа. Это может удалить некоторые стилистические
+    // элементы с заглавными буквами (например, [A SOUND]), но это компромисс для удаления
+    // системных сообщений со пробелами типа [SYSTEM MESSAGE].
+    .replace(/\[[A-Z0-9 _-]{2,}\]/g, "")
     .trim();
 
   return cleaned || "AM наблюдает за тобой в тишине...";
