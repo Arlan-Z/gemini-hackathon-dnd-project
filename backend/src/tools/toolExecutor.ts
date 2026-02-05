@@ -99,7 +99,7 @@ export const executeInventoryAction = (
     };
   }
   
-  const action = args.action.trim();
+  const action = args.action.trim().toLowerCase();
   
   // Validate required 'itemName' parameter
   if (typeof args.itemName !== "string" || !args.itemName.trim()) {
