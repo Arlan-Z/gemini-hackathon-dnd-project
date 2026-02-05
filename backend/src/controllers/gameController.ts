@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
 import {
-  applyAiResponse,
   createSession,
   getSession,
   serializeState,
@@ -129,16 +128,32 @@ const extractStatUpdates = (
 
   for (const call of toolCalls) {
     if (call.toolName === "update_player_stats" && call.result.success) {
+      // Prefer the normalized appliedDelta from the tool result; fall back to raw args
+      // if appliedDelta is missing or not an object. This defends against partially
+      // malformed tool responses while still surfacing best-effort stat changes.
       const source =
         call.result.appliedDelta && typeof call.result.appliedDelta === "object"
           ? call.result.appliedDelta
           : call.args;
 
-      if (typeof source.hp === "number") updates.hp = (updates.hp || 0) + source.hp;
-      if (typeof source.sanity === "number") updates.sanity = (updates.sanity || 0) + source.sanity;
-      if (typeof source.str === "number") updates.str = (updates.str || 0) + source.str;
-      if (typeof source.int === "number") updates.int = (updates.int || 0) + source.int;
-      if (typeof source.dex === "number") updates.dex = (updates.dex || 0) + source.dex;
+      if (!source || typeof source !== "object") {
+        // Skip this call if we cannot safely read stat fields from the source.
+        continue;
+      }
+
+      const { hp, sanity, str, int, dex } = source as {
+        hp?: unknown;
+        sanity?: unknown;
+        str?: unknown;
+        int?: unknown;
+        dex?: unknown;
+      };
+
+      if (typeof hp === "number") updates.hp = (updates.hp || 0) + hp;
+      if (typeof sanity === "number") updates.sanity = (updates.sanity || 0) + sanity;
+      if (typeof str === "number") updates.str = (updates.str || 0) + str;
+      if (typeof int === "number") updates.int = (updates.int || 0) + int;
+      if (typeof dex === "number") updates.dex = (updates.dex || 0) + dex;
     }
   }
 

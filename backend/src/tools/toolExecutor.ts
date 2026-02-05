@@ -162,8 +162,17 @@ export const executeAddTag = (
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
-  const tag = args.tag as string;
-  const reason = args.reason as string || "unknown";
+
+  // Validate required 'tag' parameter
+  if (typeof args.tag !== "string" || !args.tag.trim()) {
+    return {
+      success: false,
+      message: "Invalid or missing 'tag' parameter. Must be a non-empty, non-whitespace string.",
+    };
+  }
+
+  const tag = args.tag.trim();
+  const reason = (args.reason as string) || "unknown";
 
   if (state.tags.includes(tag)) {
     return {
@@ -190,8 +199,17 @@ export const executeRemoveTag = (
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
-  const tag = args.tag as string;
-  const reason = args.reason as string || "unknown";
+
+  // Validate required 'tag' parameter
+  if (typeof args.tag !== "string" || !args.tag.trim()) {
+    return {
+      success: false,
+      message: "Invalid or missing 'tag' parameter. Must be a non-empty, non-whitespace string.",
+    };
+  }
+
+  const tag = args.tag.trim();
+  const reason = (args.reason as string) || "unknown";
 
   const index = state.tags.indexOf(tag);
   if (index === -1) {
@@ -218,8 +236,24 @@ export const executeTriggerGameOver = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  const endingType = args.endingType as string;
-  const deathDescription = args.deathDescription as string;
+  const rawEndingType = args.endingType;
+  const rawDeathDescription = args.deathDescription;
+
+  if (
+    typeof rawEndingType !== "string" ||
+    rawEndingType.trim() === "" ||
+    typeof rawDeathDescription !== "string" ||
+    rawDeathDescription.trim() === ""
+  ) {
+    return {
+      success: false,
+      message:
+        "Invalid arguments for trigger_game_over: endingType and deathDescription must be non-empty strings.",
+    };
+  }
+
+  const endingType = rawEndingType.trim();
+  const deathDescription = rawDeathDescription.trim();
 
   ctx.state.isGameOver = true;
   ctx.gameOverTriggered = true;
@@ -239,8 +273,17 @@ export const executeGenerateSceneImage = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  const visualDescription = args.visualDescription as string;
+  const visualDescription = args.visualDescription;
   const style = (args.style as string) || "horror";
+
+  // Validate visualDescription parameter
+  if (typeof visualDescription !== "string" || visualDescription.trim().length === 0) {
+    return {
+      success: false,
+      message: "visualDescription must be a non-empty string to generate a scene image.",
+      data: { visualDescription },
+    };
+  }
 
   // Сохраняем промпт для последующей генерации
   ctx.imagePrompt = `${visualDescription}, ${style} style, cinematic lighting, detailed`;

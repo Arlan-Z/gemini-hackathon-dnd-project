@@ -137,12 +137,60 @@ Game Over: ${state.isGameOver}`;
 
     if (functionCall?.args) {
       const args = functionCall.args as Record<string, unknown>;
+
+      const isValidIntent = (value: unknown): value is IntentType => {
+        const allowedIntents: IntentType[] = [
+          "exploration",
+          "combat",
+          "dialogue",
+          "item_use",
+          "self_harm",
+          "escape_attempt",
+          "rest",
+          "unknown",
+        ];
+        return typeof value === "string" && (allowedIntents as string[]).includes(value);
+      };
+
+      const isValidDifficulty = (
+        value: unknown,
+      ): value is RouterResult["suggestedDifficulty"] => {
+        // Allowed difficulty levels for routing; keep in sync with RouterResult type.
+        const allowedDifficulties = ["trivial", "easy", "medium", "hard", "deadly"] as const;
+        return typeof value === "string" && (allowedDifficulties as readonly string[]).includes(value);
+      };
+
+      const isValidEmotionalTone = (
+        value: unknown,
+      ): value is RouterResult["emotionalTone"] => {
+        // Allowed emotional tones; keep in sync with RouterResult type.
+        const allowedTones = ["neutral", "aggressive", "fearful", "desperate", "cunning"] as const;
+        return typeof value === "string" && (allowedTones as readonly string[]).includes(value);
+      };
+
+      const rawIntent = args.intent;
+      const rawConfidence = args.confidence;
+      const rawReasoning = args.reasoning;
+      const rawDifficulty = args.suggestedDifficulty;
+      const rawEmotionalTone = args.emotionalTone;
+
+      const intent: IntentType = isValidIntent(rawIntent) ? rawIntent : "unknown";
+      const confidence =
+        typeof rawConfidence === "number" && Number.isFinite(rawConfidence)
+          ? Math.max(0, Math.min(1, rawConfidence))
+          : 0.5;
+      const reasoning = typeof rawReasoning === "string" ? rawReasoning : "";
+      const suggestedDifficulty: RouterResult["suggestedDifficulty"] =
+        isValidDifficulty(rawDifficulty) ? rawDifficulty : "medium";
+      const emotionalTone: RouterResult["emotionalTone"] =
+        isValidEmotionalTone(rawEmotionalTone) ? rawEmotionalTone : "neutral";
+
       return {
-        intent: (args.intent as IntentType) || "unknown",
-        confidence: (args.confidence as number) || 0.5,
-        reasoning: (args.reasoning as string) || "",
-        suggestedDifficulty: (args.suggestedDifficulty as RouterResult["suggestedDifficulty"]) || "medium",
-        emotionalTone: (args.emotionalTone as RouterResult["emotionalTone"]) || "neutral",
+        intent,
+        confidence,
+        reasoning,
+        suggestedDifficulty,
+        emotionalTone,
       };
     }
 
