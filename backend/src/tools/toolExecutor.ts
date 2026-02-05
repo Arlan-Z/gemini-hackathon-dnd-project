@@ -90,8 +90,26 @@ export const executeInventoryAction = (
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
-  const action = args.action as string;
-  const itemName = args.itemName as string;
+  
+  // Validate required 'action' parameter
+  if (typeof args.action !== "string" || !args.action.trim()) {
+    return {
+      success: false,
+      message: "Invalid or missing 'action' parameter. Must be a non-empty, non-whitespace string ('add' or 'remove').",
+    };
+  }
+  
+  const action = args.action.trim().toLowerCase();
+  
+  // Validate required 'itemName' parameter
+  if (typeof args.itemName !== "string" || !args.itemName.trim()) {
+    return {
+      success: false,
+      message: "Invalid or missing 'itemName' parameter. Must be a non-empty, non-whitespace string.",
+    };
+  }
+  
+  const itemName = args.itemName.trim();
   const reason = args.reason as string || "unknown";
 
   if (action === "add") {
@@ -132,7 +150,7 @@ export const executeInventoryAction = (
 
   return {
     success: false,
-    message: `Unknown inventory action: ${action}`,
+    message: `Unknown inventory action: ${action}. Valid actions are 'add' or 'remove'.`,
   };
 };
 
