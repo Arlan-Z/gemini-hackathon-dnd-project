@@ -1,21 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { config } from "../config";
+import { getNextKey, markKeyRateLimited } from "../utils/keyPool";
 
 const FALLBACK_IMAGE_URL = "https://placehold.co/1024x1024/png?text=AM";
-
-let cachedClient: GoogleGenAI | null = null;
-
-const getClient = () => {
-  if (!config.geminiApiKey) {
-    return null;
-  }
-
-  if (!cachedClient) {
-    cachedClient = new GoogleGenAI({ apiKey: config.geminiApiKey });
-  }
-
-  return cachedClient;
-};
 
 export const generateImage = async (prompt: string) => {
   const safePrompt = prompt.trim().slice(0, 400);
@@ -24,14 +11,16 @@ export const generateImage = async (prompt: string) => {
     ? `https://placehold.co/1024x1024/png?text=${encoded}`
     : FALLBACK_IMAGE_URL;
 
-  const client = getClient();
-  if (!client || !safePrompt) {
+  if (!safePrompt) {
     return { imageUrl: fallback };
   }
 
+  const apiKey = getNextKey();
+
   try {
+    const client = new GoogleGenAI({ apiKey });
     const response = await client.models.generateImages({
-      model: config.geminiImageModel, // например: 'imagen-4.0-generate-001'
+      model: config.geminiImageModel,
       prompt: safePrompt,
       config: {
         numberOfImages: 1,
@@ -46,7 +35,12 @@ export const generateImage = async (prompt: string) => {
       };
     }
   } catch (error) {
-    console.warn("Gemini image generation failed, using fallback.", error);
+    // Mark key on rate limit, but don't crash — just use fallback
+    const msg = String((error as Record<string, unknown>)?.message ?? "");
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+      markKeyRateLimited(apiKey);
+    }
+    console.warn("Image generation failed, using fallback.", (error as Error)?.message);
   }
 
   return { imageUrl: fallback };

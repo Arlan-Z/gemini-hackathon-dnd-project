@@ -96,7 +96,6 @@ router.post("/action", async (req, res, next) => {
           success: tc.result.success,
           message: tc.result.message,
         })),
-        routing: orchestratorResponse.routing,
         isGameOver: orchestratorResponse.isGameOver,
         gameOverDescription: orchestratorResponse.gameOverDescription,
       },
@@ -110,6 +109,15 @@ router.post("/action", async (req, res, next) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: "Invalid request payload", issues: error.issues });
+      return;
+    }
+    // Return 429 to client instead of 500 on rate limit
+    const msg = String((error as Record<string, unknown>)?.message ?? "");
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+      res.status(429).json({
+        error: "Слишком много запросов. AM задумался... Попробуй через 30 секунд.",
+        retryAfter: 30,
+      });
       return;
     }
     console.error("[GameController] Error processing action:", error);
