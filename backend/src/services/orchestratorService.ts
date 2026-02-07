@@ -123,16 +123,30 @@ const getAIClient = (): { ai: GoogleGenAI; apiKey: string } => {
 
 /**
  * Вызов generateContent с retry и key rotation.
+ * При невалидном ключе — помечает его мёртвым и ретраит с новым.
  */
 const generateWithRetry = async (
   params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
   label: string,
+  maxKeyRetries = 3,
 ) => {
-  const { ai, apiKey } = getAIClient();
-  return withRetry(
-    () => ai.models.generateContent(params),
-    { maxRetries: 2, label, apiKey },
-  );
+  for (let keyAttempt = 0; keyAttempt < maxKeyRetries; keyAttempt++) {
+    const { ai, apiKey } = getAIClient();
+    try {
+      return await withRetry(
+        () => ai.models.generateContent(params),
+        { maxRetries: 2, label, apiKey },
+      );
+    } catch (error) {
+      const msg = String((error as Record<string, unknown>)?.message ?? "");
+      if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+        console.warn(`[Orchestrator] Invalid key detected, trying next key (attempt ${keyAttempt + 1}/${maxKeyRetries})...`);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error(`${label}: all attempted keys were invalid`);
 };
 
 
