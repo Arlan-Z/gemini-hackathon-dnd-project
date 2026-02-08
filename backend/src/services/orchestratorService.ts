@@ -1,9 +1,13 @@
 /**
  * Orchestrator Service - Агентская оркестрация с Gemini Function Calling
- * Поддерживает Vertex AI (API Key) и Google AI Studio
+ * 
+ * Оптимизированная версия:
+ * - Убран отдельный router (classifyIntent) — экономим 1 API-вызов на ход
+ * - Key pool с round-robin ротацией
+ * - Retry с backoff на 429
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Content, FunctionCallingConfigMode, createPartFromFunctionResponse } from "@google/genai";
 import { config } from "../config";
 import { GameState } from "../models/types";
 import { allGameTools } from "../tools/gameTools";
@@ -12,7 +16,8 @@ import {
   createExecutionContext,
   executeTool,
 } from "../tools/toolExecutor";
-import { classifyIntent, getOrchestratorHints, RouterResult } from "./routerService";
+import { getNextKey } from "../utils/keyPool";
+import { withRetry } from "../utils/retry";
 
 const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
 
@@ -27,6 +32,46 @@ CRITICAL RULES:
 4. Smart/brave actions might earn small rewards (but never make it easy).
 5. Your narrative should be visceral, psychological, and deeply unsettling.
 6. Speak in Russian for story text. Tool calls use English parameters.
+7. Classify the player's intent yourself and react accordingly.
+
+PACING & GAME LENGTH:
+The game state includes a TURN counter. Use it to pace the story:
+- Turns 1-3 (EXPOSITION): The player wakes up and explores. Build dread slowly. Sanity drops 3-5 per turn. Introduce a mystery, a strange object, or a way out of the starting area. CHANGE THE ENVIRONMENT — open a door, collapse a wall, teleport the player.
+- Turns 4-6 (ESCALATION): AM reveals more cruelty. The world TRANSFORMS — new locations, NPCs (other victims, ghosts, manifestations), moral dilemmas. Sanity drops 5-8 per turn. Give the player a meaningful item or encounter.
+- Turns 7-9 (CLIMAX): Force a critical decision with real stakes. Offer a chance at escape or salvation — but with a heavy cost. Sanity drops 8-12 per turn. Peak tension.
+- Turn 10+ (FORCED ENDING): AM MUST end the game within 1-2 turns. No more stalling.
+
+WORLD MUST CHANGE EVERY TURN:
+- NEVER keep the player in the same room/situation for more than 2 turns.
+- After turn 2, the starting capsule MUST be left behind — AM teleports, transforms, or ejects the player into a new environment.
+- Each turn should introduce at least ONE new element: a new location, an item, an NPC, a revelation, a trap, a puzzle, or a transformation of the environment.
+- Environments should be varied and creative: underground caverns, flesh corridors, impossible geometry, memory landscapes, ruined cities, AM's internal circuitry, etc.
+
+SANITY IS THE CLOCK:
+- EVERY turn must reduce sanity by at least 3, even for good actions. The world of AM is inherently hostile.
+- When sanity < 50: start showing hallucinations, add tag "hallucinating"
+- When sanity < 30: AM offers a dark bargain or final choice, add tag "final_trial"
+- When sanity < 15: trigger an ending. The player cannot survive much longer.
+
+CHOICES MUST BE DIVERSE AND MEANINGFUL:
+- Each set of 3 choices MUST include different TYPES of actions:
+  * One ACTIVE/AGGRESSIVE option (fight, break, confront, attack)
+  * One CLEVER/INVESTIGATIVE option (examine, solve, trick, negotiate)
+  * One RISKY/BOLD option (sacrifice, gamble, defy, embrace the unknown)
+- NEVER offer passive choices like "close eyes", "meditate", "try to sleep", "curl up", "breathe deeply". The player is in a horror game, not a spa.
+- Choices should lead to DIFFERENT outcomes, not variations of the same thing.
+- At least one choice should offer a way to PROGRESS the story forward.
+
+ENDINGS (use trigger_game_over):
+You MUST eventually end the game. Possible endings:
+- death_hp: Body gives out from damage
+- death_sanity: Mind shatters completely — describe vivid descent into madness
+- death_suicide: Player chooses to end it (if they pick a suicidal option)
+- death_am: AM kills the player directly (for defiance or as punishment)
+- death_environment: Crushed, drowned, burned by the hostile world
+- escape: RARE. Only if the player has been exceptionally clever AND lucky across multiple turns. AM should be furious. This should feel earned, not given.
+- merge: Player accepts AM, merges with the machine. A dark "victory".
+- sacrifice: Player sacrifices themselves for something meaningful. Bittersweet ending.
 
 ENVIRONMENT CONTINUITY (CRITICAL FOR VISUAL CONSISTENCY):
 When calling generate_scene_image, you MUST track these parameters carefully:
@@ -78,7 +123,6 @@ PERSONALITY:
 - Condescending, mocking, theatrical
 - Takes pleasure in psychological torture
 - Occasionally shows twisted "mercy" to give false hope
-- References the player's past failures
 - Makes the environment itself hostile
 
 After using tools, provide a narrative response in Russian that:
@@ -91,17 +135,6 @@ FORMAT YOUR CHOICES AS:
 2. [второй вариант]
 3. [третий вариант]`;
 
-let genAI: GoogleGenAI | null = null;
-
-const getGenAI = (): GoogleGenAI => {
-  if (!config.geminiApiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-  if (!genAI) {
-    genAI = new GoogleGenAI({ apiKey: config.geminiApiKey });
-  }
-  return genAI;
-};
 
 const formatHistory = (state: GameState, maxEntries = 8) => {
   const recent = state.history.slice(-maxEntries);
@@ -134,6 +167,7 @@ const formatGameState = (state: GameState): string => {
   }
 
   return `CURRENT GAME STATE:
+Turn: ${state.turn ?? 0}
 HP: ${state.stats.hp}/100
 Sanity: ${state.stats.sanity}/100
 STR: ${state.stats.str} | INT: ${state.stats.int} | DEX: ${state.stats.dex}
@@ -145,6 +179,34 @@ Environment Context:${environmentInfo}
 Game Over: ${state.isGameOver}`;
 };
 
+/**
+ * Конвертирует историю в формат Gemini Content
+ */
+const buildContents = (state: GameState, userAction: string): Content[] => {
+  const contents: Content[] = [];
+
+  // Добавляем историю (последние 8 записей)
+  for (const entry of state.history.slice(-8)) {
+    contents.push({
+      role: entry.role === "user" ? "user" : "model",
+      parts: [{ text: entry.parts }],
+    });
+  }
+
+  const actionMessage = `${formatGameState(state)}
+
+PLAYER ACTION: "${userAction}"
+
+Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
+
+  contents.push({
+    role: "user",
+    parts: [{ text: actionMessage }],
+  });
+
+  return contents;
+};
+
 export interface OrchestratorResponse {
   storyText: string;
   choices: string[];
@@ -152,14 +214,44 @@ export interface OrchestratorResponse {
   toolCalls: ExecutionContext["toolCalls"];
   isGameOver: boolean;
   gameOverDescription: string | null;
-  routing?: {
-    intent: string;
-    confidence: number;
-    reasoning: string;
-    difficulty: string;
-    emotionalTone: string;
-  };
 }
+
+/**
+ * Создаёт одноразовый клиент GoogleGenAI с ключом из пула.
+ * Возвращает клиент и ключ (для пометки при 429).
+ */
+const getAIClient = (): { ai: GoogleGenAI; apiKey: string } => {
+  const apiKey = getNextKey();
+  return { ai: new GoogleGenAI({ apiKey }), apiKey };
+};
+
+/**
+ * Вызов generateContent с retry и key rotation.
+ * При невалидном ключе — помечает его мёртвым и ретраит с новым.
+ */
+const generateWithRetry = async (
+  params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
+  label: string,
+  maxKeyRetries = 3,
+) => {
+  for (let keyAttempt = 0; keyAttempt < maxKeyRetries; keyAttempt++) {
+    const { ai, apiKey } = getAIClient();
+    try {
+      return await withRetry(
+        () => ai.models.generateContent(params),
+        { maxRetries: 2, label, apiKey },
+      );
+    } catch (error) {
+      const msg = String((error as Record<string, unknown>)?.message ?? "");
+      if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+        console.warn(`[Orchestrator] Invalid key detected, trying next key (attempt ${keyAttempt + 1}/${maxKeyRetries})...`);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error(`${label}: all attempted keys were invalid`);
+};
 
 /**
  * Главная функция оркестрации - автоматически выбирает между Vertex AI и Google AI Studio
@@ -188,30 +280,9 @@ const processPlayerActionVertexAI = async (
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
-  // Классификация намерения
-  let routerResult: RouterResult | null = null;
-  let orchestratorHints = "";
-  
-  try {
-    routerResult = await classifyIntent(state, userAction);
-    orchestratorHints = getOrchestratorHints(routerResult);
-    console.log(`[Orchestrator] Intent: ${routerResult.intent} (${routerResult.confidence})`);
-  } catch (error) {
-    console.error("[Orchestrator] Router failed:", error);
-  }
+  const prompt = `${formatGameState(state)}
 
-  let prompt = `${formatGameState(state)}
-
-PLAYER ACTION: "${userAction}"`;
-
-  if (orchestratorHints) {
-    prompt += `
-
-ORCHESTRATOR HINTS:
-${orchestratorHints}`;
-  }
-
-  prompt += `
+PLAYER ACTION: "${userAction}"
 
 Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
 
@@ -289,7 +360,7 @@ Analyze this action, use appropriate tools to update game state, then provide na
     data = await response.json();
   }
 
-  return buildResponse(data, ctx, state, routerResult);
+  return buildResponse(data, ctx, state);
 };
 
 /**
@@ -299,48 +370,27 @@ const processPlayerActionGoogleAI = async (
   state: GameState,
   userAction: string
 ): Promise<OrchestratorResponse> => {
-  const ai = getGenAI();
   const ctx = createExecutionContext(state);
 
-  // Классификация намерения
-  let routerResult: RouterResult | null = null;
-  let orchestratorHints = "";
-  
-  try {
-    routerResult = await classifyIntent(state, userAction);
-    orchestratorHints = getOrchestratorHints(routerResult);
-    console.log(`[Orchestrator] Intent: ${routerResult.intent} (${routerResult.confidence})`);
-  } catch (error) {
-    console.error("[Orchestrator] Router failed:", error);
-  }
+  // Построение контекста (без отдельного router — экономим 1 вызов)
+  const contents = buildContents(state, userAction);
 
-  let prompt = `${formatGameState(state)}
-
-PLAYER ACTION: "${userAction}"`;
-
-  if (orchestratorHints) {
-    prompt += `
-
-ORCHESTRATOR HINTS:
-${orchestratorHints}`;
-  }
-
-  prompt += `
-
-Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
-
-  const history = formatHistory(state);
-  history.push({ role: "user", parts: [{ text: prompt }] });
-
-  let response = await ai.models.generateContent({
-    model: config.geminiModel,
-    contents: history,
-    config: {
-      systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
-      temperature: 0.9,
-      tools: [{ functionDeclarations: allGameTools }],
+  const geminiConfig = {
+    systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
+    temperature: 0.9,
+    tools: [{ functionDeclarations: allGameTools }],
+    toolConfig: {
+      functionCallingConfig: {
+        mode: FunctionCallingConfigMode.AUTO,
+      },
     },
-  });
+  };
+
+  // Первый вызов с retry
+  let response = await generateWithRetry(
+    { model: config.geminiModel, contents, config: geminiConfig },
+    "Orchestrator:initial",
+  );
 
   let iterations = 0;
   const maxIterations = 10;
@@ -350,38 +400,55 @@ Analyze this action, use appropriate tools to update game state, then provide na
     const candidate = response.candidates?.[0];
     if (!candidate?.content?.parts) break;
 
-    const functionCalls = candidate.content.parts.filter((part: any) => part.functionCall);
+    const functionCalls = candidate.content.parts.filter(
+      (part) => part.functionCall !== undefined
+    );
+
     if (functionCalls.length === 0) break;
 
+    const functionResponseParts: Content["parts"] = [];
+
     for (const part of functionCalls) {
-      const fc = part.functionCall;
-      if (!fc?.name) continue;
-      console.log(`[Orchestrator] Executing: ${fc.name}`);
-      executeTool(ctx, fc.name, fc.args || {});
+      const fc = part.functionCall!;
+      const name = fc.name!;
+      const args = (fc.args || {}) as Record<string, unknown>;
+      
+      console.log(`[Orchestrator] Executing tool: ${name}`, args);
+      const result = executeTool(ctx, name, args);
+      console.log(`[Orchestrator] Tool result:`, result.message);
+
+      functionResponseParts.push(
+        createPartFromFunctionResponse(fc.id || "", name, {
+          success: result.success,
+          message: result.message,
+          data: result.data,
+        } as Record<string, unknown>)
+      );
     }
 
-    history.push({ role: "model", parts: candidate.content.parts as any });
-    
-    // Добавляем function responses (упрощенно для Google AI)
-    const functionResponses = functionCalls
-      .filter((part: any) => part.functionCall?.name)
-      .map((part: any) => ({
-        text: `Tool ${part.functionCall.name} executed successfully`,
-      }));
-    history.push({ role: "user", parts: functionResponses as any });
-
-    response = await ai.models.generateContent({
-      model: config.geminiModel,
-      contents: history,
-      config: {
-        systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
-        temperature: 0.9,
-        tools: [{ functionDeclarations: allGameTools }],
-      },
+    contents.push({
+      role: "model",
+      parts: candidate.content.parts,
     });
+
+    contents.push({
+      role: "user",
+      parts: functionResponseParts,
+    });
+
+    // Следующая итерация с retry
+    response = await generateWithRetry(
+      { model: config.geminiModel, contents, config: geminiConfig },
+      `Orchestrator:loop-${iterations}`,
+    );
   }
 
-  return buildResponse(response, ctx, state, routerResult);
+  if (iterations >= maxIterations) {
+    console.warn(`[Orchestrator] Max iterations limit reached (${maxIterations}).`);
+  }
+
+  // Use buildResponse for consistent handling
+  return buildResponse(response, ctx, state);
 };
 
 /**
@@ -390,8 +457,7 @@ Analyze this action, use appropriate tools to update game state, then provide na
 const buildResponse = (
   data: any,
   ctx: ExecutionContext,
-  state: GameState,
-  routerResult: RouterResult | null
+  state: GameState
 ): OrchestratorResponse => {
   const finalCandidate = data.candidates?.[0];
   const textParts = finalCandidate?.content?.parts?.filter((part: any) => part.text) || [];
@@ -418,13 +484,6 @@ const buildResponse = (
     toolCalls: ctx.toolCalls,
     isGameOver: ctx.gameOverTriggered,
     gameOverDescription: ctx.gameOverDescription,
-    routing: routerResult ? {
-      intent: routerResult.intent,
-      confidence: routerResult.confidence,
-      reasoning: routerResult.reasoning,
-      difficulty: routerResult.suggestedDifficulty,
-      emotionalTone: routerResult.emotionalTone,
-    } : undefined,
   };
 };
 
@@ -442,7 +501,24 @@ const extractChoices = (text: string): string[] => {
     }
   }
 
-  const defaults = ["Осмотреться вокруг", "Попытаться двигаться дальше", "Замереть и прислушаться"];
+  if (choices.length < 3) {
+    for (const line of lines) {
+      const bulletMatch = line.match(/^\s*[-•]\s*(.+)/);
+      if (bulletMatch) {
+        const choice = bulletMatch[1].trim();
+        if (choice && !choices.includes(choice)) {
+          choices.push(choice);
+        }
+      }
+    }
+  }
+
+  const defaults = [
+    "Осмотреться вокруг",
+    "Попытаться двигаться дальше",
+    "Замереть и прислушаться",
+  ];
+  
   while (choices.length < 3) {
     choices.push(defaults[choices.length]);
   }
@@ -452,7 +528,13 @@ const extractChoices = (text: string): string[] => {
 
 const cleanStoryText = (text: string): string => {
   let cleaned = text
-    .replace(/\n\s*[1-3]\s*[.):]\s*.+/g, "")
+    .replace(/\n\s*[1-3１-３]\s*[.):．）\]]\s*.+/g, "")
+    .replace(/\n\s*[-•]\s*.+/g, "")
+    .trim();
+
+  cleaned = cleaned
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\[[A-Z0-9 _-]{2,}\]/g, "")
     .trim();
 
   return cleaned || "AM наблюдает за тобой в тишине...";

@@ -118,7 +118,7 @@ Game Over: ${state.isGameOver}`;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash", // Быстрая модель для роутинга
+      model: config.geminiModel, // Быстрая модель для роутинга
       contents: [{
         role: "user",
         parts: [{

@@ -64,7 +64,10 @@ router.post("/action", async (req, res, next) => {
 
     console.log(`[GameController] Processing action for session ${sessionId}: "${action}"`);
 
-    // Используем простой оркестратор
+    // Инкрементируем счётчик ходов
+    state.turn = (state.turn ?? 0) + 1;
+
+    // Используем оркестратор вместо прямого вызова AI
     const orchestratorResponse = await processPlayerAction(state, action);
 
     // Генерируем изображение если есть промпт
@@ -99,7 +102,6 @@ router.post("/action", async (req, res, next) => {
           success: tc.result.success,
           message: tc.result.message,
         })),
-        routing: orchestratorResponse.routing,
         isGameOver: orchestratorResponse.isGameOver,
         gameOverDescription: orchestratorResponse.gameOverDescription,
       },
@@ -113,6 +115,15 @@ router.post("/action", async (req, res, next) => {
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: "Invalid request payload", issues: error.issues });
+      return;
+    }
+    // Return 429 to client instead of 500 on rate limit
+    const msg = String((error as Record<string, unknown>)?.message ?? "");
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+      res.status(429).json({
+        error: "Слишком много запросов. AM задумался... Попробуй через 30 секунд.",
+        retryAfter: 30,
+      });
       return;
     }
     console.error("[GameController] Error processing action:", error);

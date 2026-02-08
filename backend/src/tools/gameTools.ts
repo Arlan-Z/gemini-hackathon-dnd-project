@@ -141,13 +141,15 @@ Ending types:
 - death_suicide: Player killed themselves
 - death_am: AM directly killed the player
 - death_environment: Environmental death
-- escape: Rare - player somehow escaped (almost impossible)`,
+- escape: Rare - player somehow escaped (almost impossible)
+- merge: Player accepted AM and merged with the machine
+- sacrifice: Player sacrificed themselves for something meaningful`,
   parameters: {
     type: Type.OBJECT,
     properties: {
       endingType: {
         type: Type.STRING,
-        description: "Type of game ending: death_hp, death_sanity, death_suicide, death_am, death_environment, or escape",
+        description: "Type of game ending: death_hp, death_sanity, death_suicide, death_am, death_environment, escape, merge, or sacrifice",
       },
       deathDescription: {
         type: Type.STRING,

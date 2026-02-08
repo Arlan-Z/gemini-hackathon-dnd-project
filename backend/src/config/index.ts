@@ -11,11 +11,28 @@ const resolvePort = () => {
   return Number.isFinite(port) ? port : 3001;
 };
 
+/**
+ * Парсит ключи из GEMINI_API_KEYS (через запятую) или GEMINI_API_KEY (один).
+ */
+const resolveApiKeys = (): string[] => {
+  const multi = process.env.GEMINI_API_KEYS;
+  if (multi) {
+    return multi.split(",").map((k) => k.trim()).filter(Boolean);
+  }
+  const single = process.env.GEMINI_API_KEY;
+  if (single?.trim()) {
+    return [single.trim()];
+  }
+  return [];
+};
+
 export const config = {
   port: resolvePort(),
   
   // Google AI Studio (простой API ключ)
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  /** All available API keys for round-robin rotation */
+  geminiApiKeys: resolveApiKeys(),
   
   // Vertex AI настройки
   useVertexAI: process.env.USE_VERTEX_AI === "true",

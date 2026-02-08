@@ -1,20 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import { config } from "../config";
+import { getNextKey, markKeyRateLimited, markKeyDead } from "../utils/keyPool";
 
 const FALLBACK_IMAGE_URL = "https://placehold.co/1024x1024/png?text=AM";
 const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
-
-let cachedClient: GoogleGenAI | null = null;
-
-const getClient = () => {
-  if (!config.geminiApiKey) {
-    return null;
-  }
-  if (!cachedClient) {
-    cachedClient = new GoogleGenAI({ apiKey: config.geminiApiKey });
-  }
-  return cachedClient;
-};
 
 /**
  * Генерация изображения через Vertex AI с API Key
@@ -72,40 +61,52 @@ const generateImageVertexAI = async (prompt: string): Promise<string | null> => 
 };
 
 /**
- * Генерация изображения через Google AI Studio
+ * Генерация изображения через Google AI Studio с key rotation
  */
 const generateImageStudio = async (prompt: string): Promise<string | null> => {
-  const client = getClient();
-  if (!client) {
-    return null;
-  }
-
   console.log(`[ImageService] Using Google AI Studio`);
   console.log(`[ImageService] Model: ${config.geminiImageModel}`);
   console.log(`[ImageService] Prompt: ${prompt.substring(0, 100)}...`);
 
-  try {
-    const response = await client.models.generateImages({
-      model: config.geminiImageModel,
-      prompt: prompt,
-      config: {
-        numberOfImages: 1,
-      },
-    });
+  const maxKeyRetries = 3;
+  for (let attempt = 0; attempt < maxKeyRetries; attempt++) {
+    const apiKey = getNextKey();
 
-    const firstImage = response?.generatedImages?.[0];
+    try {
+      const client = new GoogleGenAI({ apiKey });
+      const response = await client.models.generateImages({
+        model: config.geminiImageModel,
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+        },
+      });
 
-    if (firstImage?.image?.imageBytes) {
-      console.log(`[ImageService] ✅ Image generated successfully (${firstImage.image.imageBytes.length} bytes)`);
-      return `data:image/png;base64,${firstImage.image.imageBytes}`;
+      const firstImage = response?.generatedImages?.[0];
+
+      if (firstImage?.image?.imageBytes) {
+        console.log(`[ImageService] ✅ Image generated successfully (${firstImage.image.imageBytes.length} bytes)`);
+        return `data:image/png;base64,${firstImage.image.imageBytes}`;
+      }
+
+      console.warn("[ImageService] ⚠️ No image data in response");
+      break;
+    } catch (error) {
+      const msg = String((error as Record<string, unknown>)?.message ?? "");
+      if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+        markKeyDead(apiKey);
+        console.warn(`[ImageService] Invalid key, trying next (attempt ${attempt + 1}/${maxKeyRetries})...`);
+        continue;
+      }
+      if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+        markKeyRateLimited(apiKey);
+      }
+      console.error("[ImageService] ❌ Google AI Studio error:", msg);
+      break;
     }
-
-    console.warn("[ImageService] ⚠️ No image data in response");
-    return null;
-  } catch (error: any) {
-    console.error("[ImageService] ❌ Google AI Studio error:", error.message);
-    return null;
   }
+
+  return null;
 };
 
 /**

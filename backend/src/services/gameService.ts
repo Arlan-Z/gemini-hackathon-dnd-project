@@ -34,6 +34,7 @@ export const createSession = () => {
     tags: [],
     history: [{ role: "model", parts: INTRO_TEXT }],
     isGameOver: false,
+    turn: 0,
     currentLocation: "metal_capsule", // Начальная локация
     locationHistory: ["metal_capsule"],
     environment: {

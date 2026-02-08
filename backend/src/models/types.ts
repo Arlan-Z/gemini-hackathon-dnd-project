@@ -30,6 +30,7 @@ export interface GameState {
   tags: string[];
   history: HistoryMessage[];
   isGameOver: boolean;
+  turn: number;
   currentLocation?: string; // Текущая локация для связности изображений
   locationHistory?: string[]; // История локаций
   environment?: EnvironmentContext; // Детальный контекст окружения
