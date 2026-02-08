@@ -23,6 +23,7 @@ export interface GameState {
   tags: string[];
   history: HistoryMessage[];
   isGameOver: boolean;
+  turn: number;
 }
 
 export interface AIResponse {

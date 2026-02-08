@@ -34,6 +34,7 @@ export const createSession = () => {
     tags: [],
     history: [{ role: "model", parts: INTRO_TEXT }],
     isGameOver: false,
+    turn: 0,
   };
 
   sessions.set(sessionId, state);

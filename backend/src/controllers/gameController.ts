@@ -61,6 +61,9 @@ router.post("/action", async (req, res, next) => {
 
     console.log(`[GameController] Processing action for session ${sessionId}: "${action}"`);
 
+    // Инкрементируем счётчик ходов
+    state.turn = (state.turn ?? 0) + 1;
+
     // Используем оркестратор вместо прямого вызова AI
     const orchestratorResponse = await processPlayerAction(state, action);
 
