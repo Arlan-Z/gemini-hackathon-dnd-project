@@ -5,9 +5,12 @@ import {
   getSession,
   serializeState,
   pushHistoryEntry,
+  deleteSession,
 } from "../services/gameService";
 import { generateImage } from "../services/imageService";
 import { actionRequestSchema } from "../models/schemas";
+
+// Используем объединенный orchestrator с поддержкой Vertex AI и Google AI Studio
 import { processPlayerAction } from "../services/orchestratorService";
 
 const router = Router();
@@ -25,7 +28,7 @@ router.post("/start", async (_req, res, next) => {
       story_text: intro.story_text,
       choices: intro.choices,
       image_prompt: intro.image_prompt,
-      image_url: image.imageUrl,
+      image_url: image?.imageUrl || null,
       state: serializeState(state),
       // Метаданные оркестрации (для отладки/демо)
       orchestration: {
@@ -61,7 +64,7 @@ router.post("/action", async (req, res, next) => {
 
     console.log(`[GameController] Processing action for session ${sessionId}: "${action}"`);
 
-    // Используем оркестратор вместо прямого вызова AI
+    // Используем простой оркестратор
     const orchestratorResponse = await processPlayerAction(state, action);
 
     // Генерируем изображение если есть промпт
@@ -69,7 +72,7 @@ router.post("/action", async (req, res, next) => {
     if (orchestratorResponse.imagePrompt) {
       try {
         const image = await generateImage(orchestratorResponse.imagePrompt);
-        imageUrl = image.imageUrl;
+        imageUrl = image?.imageUrl || null;
       } catch (imageError) {
         console.error("[GameController] Image generation failed:", imageError);
       }
@@ -162,5 +165,42 @@ const extractStatUpdates = (
 
   return updates;
 };
+
+/**
+ * POST /restart - Рестарт игры (удаляет старую сессию и создает новую)
+ */
+router.post("/restart", async (req, res, next) => {
+  try {
+    const { sessionId } = req.body;
+
+    // Удаляем старую сессию если она есть
+    if (sessionId) {
+      deleteSession(sessionId);
+      console.log(`[GameController] Deleted session ${sessionId}`);
+    }
+
+    // Создаем новую сессию
+    const { sessionId: newSessionId, state, intro } = createSession();
+    const image = await generateImage(intro.image_prompt);
+
+    console.log(`[GameController] Created new session ${newSessionId}`);
+
+    res.json({
+      sessionId: newSessionId,
+      story_text: intro.story_text,
+      choices: intro.choices,
+      image_prompt: intro.image_prompt,
+      image_url: image?.imageUrl || null,
+      state: serializeState(state),
+      orchestration: {
+        mode: "restart",
+        toolCalls: [],
+      },
+    });
+  } catch (error) {
+    console.error("[GameController] Error restarting game:", error);
+    next(error);
+  }
+});
 
 export default router;

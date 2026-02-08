@@ -128,7 +128,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   const startGame = async () => {
-    await request('/start')
+    await request('/game/start')
   }
 
   const sendAction = async (action: string, useItemId?: string) => {
@@ -142,8 +142,36 @@ export const useGameStore = defineStore('game', () => {
       ...(useItemId ? { useItemId } : {})
     }
 
-    await request('/action', payload)
+    await request('/game/action', payload)
   }
 
-  return { gameState, loading, error, startGame, sendAction }
+  const restartGame = async () => {
+    const oldSessionId = gameState.value?.sessionId
+    
+    try {
+      const response = await fetch(`${API_BASE}/game/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: oldSessionId })
+      })
+
+      if (!response.ok) {
+        const message = await response.text()
+        throw new Error(message || response.statusText)
+      }
+
+      const data = await response.json()
+      const normalized = normalizeGameState(data)
+      gameState.value = normalized
+      error.value = null
+      
+      console.log('[GameStore] Game restarted successfully')
+      return normalized
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Unknown error'
+      throw err
+    }
+  }
+
+  return { gameState, loading, error, startGame, sendAction, restartGame }
 })

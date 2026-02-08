@@ -34,6 +34,14 @@ export const createSession = () => {
     tags: [],
     history: [{ role: "model", parts: INTRO_TEXT }],
     isGameOver: false,
+    currentLocation: "metal_capsule", // Начальная локация
+    locationHistory: ["metal_capsule"],
+    environment: {
+      location: "metal_capsule",
+      materials: ["metal", "rust"],
+      lighting: "dim_red_emergency",
+      atmosphere: "claustrophobic",
+    },
   };
 
   sessions.set(sessionId, state);
@@ -112,4 +120,7 @@ export const serializeState = (state: GameState) => ({
   inventory: state.inventory,
   tags: state.tags,
   isGameOver: state.isGameOver,
+  currentLocation: state.currentLocation,
+  locationHistory: state.locationHistory,
+  environment: state.environment,
 });
