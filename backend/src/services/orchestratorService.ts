@@ -447,36 +447,8 @@ const processPlayerActionGoogleAI = async (
     console.warn(`[Orchestrator] Max iterations limit reached (${maxIterations}).`);
   }
 
-  // Извлекаем финальный текст
-  const finalCandidate = response.candidates?.[0];
-  const textParts = finalCandidate?.content?.parts?.filter(
-    (part) => part.text !== undefined
-  ) || [];
-  
-  const finalText = textParts.map((part) => part.text).join("\n") || "AM молчит...";
-  const choices = extractChoices(finalText);
-
-  // Проверяем game over по HP/Sanity
-  if (!ctx.gameOverTriggered) {
-    if (state.stats.hp <= 0) {
-      ctx.gameOverTriggered = true;
-      ctx.gameOverDescription = "Твоё тело не выдержало. Тьма поглощает тебя.";
-      state.isGameOver = true;
-    } else if (state.stats.sanity <= 0) {
-      ctx.gameOverTriggered = true;
-      ctx.gameOverDescription = "Твой разум рассыпался. Ты больше не понимаешь, кто ты.";
-      state.isGameOver = true;
-    }
-  }
-
-  return {
-    storyText: cleanStoryText(finalText),
-    choices,
-    imagePrompt: ctx.imagePrompt,
-    toolCalls: ctx.toolCalls,
-    isGameOver: ctx.gameOverTriggered,
-    gameOverDescription: ctx.gameOverDescription,
-  };
+  // Use buildResponse for consistent handling
+  return buildResponse(response, ctx, state);
 };
 
 /**
