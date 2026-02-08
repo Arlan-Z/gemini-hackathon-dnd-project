@@ -7,7 +7,7 @@
  * - Retry с backoff на 429
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Content, FunctionCallingConfigMode, createPartFromFunctionResponse } from "@google/genai";
 import { config } from "../config";
 import { GameState } from "../models/types";
 import { allGameTools } from "../tools/gameTools";
@@ -253,18 +253,6 @@ const generateWithRetry = async (
   throw new Error(`${label}: all attempted keys were invalid`);
 };
 
-
-/**
- * Главная функция оркестрации - обрабатывает ход игрока
-  routing?: {
-    intent: string;
-    confidence: number;
-    reasoning: string;
-    difficulty: string;
-    emotionalTone: string;
-  };
-}
-
 /**
  * Главная функция оркестрации - автоматически выбирает между Vertex AI и Google AI Studio
  */
@@ -272,19 +260,6 @@ export const processPlayerAction = async (
   state: GameState,
   userAction: string
 ): Promise<OrchestratorResponse> => {
-  const ctx = createExecutionContext(state);
-
-  // Построение контекста (без отдельного router — экономим 1 вызов)
-  const contents = buildContents(state, userAction);
-
-  const geminiConfig = {
-    systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
-    temperature: 0.9,
-    tools: [{ functionDeclarations: allGameTools }],
-    toolConfig: {
-      functionCallingConfig: {
-        mode: FunctionCallingConfigMode.AUTO,
-      },
   if (config.useVertexAI && config.vertexAIApiKey) {
     console.log("[Orchestrator] Using Vertex AI with API Key");
     return processPlayerActionVertexAI(state, userAction);
@@ -305,30 +280,9 @@ const processPlayerActionVertexAI = async (
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
-  // Классификация намерения
-  let routerResult: RouterResult | null = null;
-  let orchestratorHints = "";
-  
-  try {
-    routerResult = await classifyIntent(state, userAction);
-    orchestratorHints = getOrchestratorHints(routerResult);
-    console.log(`[Orchestrator] Intent: ${routerResult.intent} (${routerResult.confidence})`);
-  } catch (error) {
-    console.error("[Orchestrator] Router failed:", error);
-  }
+  const prompt = `${formatGameState(state)}
 
-  let prompt = `${formatGameState(state)}
-
-PLAYER ACTION: "${userAction}"`;
-
-  if (orchestratorHints) {
-    prompt += `
-
-ORCHESTRATOR HINTS:
-${orchestratorHints}`;
-  }
-
-  prompt += `
+PLAYER ACTION: "${userAction}"
 
 Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
 
@@ -406,7 +360,7 @@ Analyze this action, use appropriate tools to update game state, then provide na
     data = await response.json();
   }
 
-  return buildResponse(data, ctx, state, routerResult);
+  return buildResponse(data, ctx, state);
 };
 
 /**
@@ -416,46 +370,19 @@ const processPlayerActionGoogleAI = async (
   state: GameState,
   userAction: string
 ): Promise<OrchestratorResponse> => {
-  const ai = getGenAI();
   const ctx = createExecutionContext(state);
 
-  // Классификация намерения
-  let routerResult: RouterResult | null = null;
-  let orchestratorHints = "";
-  
-  try {
-    routerResult = await classifyIntent(state, userAction);
-    orchestratorHints = getOrchestratorHints(routerResult);
-    console.log(`[Orchestrator] Intent: ${routerResult.intent} (${routerResult.confidence})`);
-  } catch (error) {
-    console.error("[Orchestrator] Router failed:", error);
-  }
+  // Построение контекста (без отдельного router — экономим 1 вызов)
+  const contents = buildContents(state, userAction);
 
-  let prompt = `${formatGameState(state)}
-
-PLAYER ACTION: "${userAction}"`;
-
-  if (orchestratorHints) {
-    prompt += `
-
-ORCHESTRATOR HINTS:
-${orchestratorHints}`;
-  }
-
-  prompt += `
-
-Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
-
-  const history = formatHistory(state);
-  history.push({ role: "user", parts: [{ text: prompt }] });
-
-  let response = await ai.models.generateContent({
-    model: config.geminiModel,
-    contents: history,
-    config: {
-      systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
-      temperature: 0.9,
-      tools: [{ functionDeclarations: allGameTools }],
+  const geminiConfig = {
+    systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
+    temperature: 0.9,
+    tools: [{ functionDeclarations: allGameTools }],
+    toolConfig: {
+      functionCallingConfig: {
+        mode: FunctionCallingConfigMode.AUTO,
+      },
     },
   };
 
@@ -520,48 +447,8 @@ Analyze this action, use appropriate tools to update game state, then provide na
     console.warn(`[Orchestrator] Max iterations limit reached (${maxIterations}).`);
   }
 
-  // Извлекаем финальный текст
-  const finalCandidate = response.candidates?.[0];
-  const textParts = finalCandidate?.content?.parts?.filter(
-    (part) => part.text !== undefined
-  ) || [];
-  
-  const finalText = textParts.map((part) => part.text).join("\n") || "AM молчит...";
-  const choices = extractChoices(finalText);
-
-  // Проверяем game over по HP/Sanity
-    const functionCalls = candidate.content.parts.filter((part: any) => part.functionCall);
-    if (functionCalls.length === 0) break;
-
-    for (const part of functionCalls) {
-      const fc = part.functionCall;
-      if (!fc?.name) continue;
-      console.log(`[Orchestrator] Executing: ${fc.name}`);
-      executeTool(ctx, fc.name, fc.args || {});
-    }
-
-    history.push({ role: "model", parts: candidate.content.parts as any });
-    
-    // Добавляем function responses (упрощенно для Google AI)
-    const functionResponses = functionCalls
-      .filter((part: any) => part.functionCall?.name)
-      .map((part: any) => ({
-        text: `Tool ${part.functionCall.name} executed successfully`,
-      }));
-    history.push({ role: "user", parts: functionResponses as any });
-
-    response = await ai.models.generateContent({
-      model: config.geminiModel,
-      contents: history,
-      config: {
-        systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
-        temperature: 0.9,
-        tools: [{ functionDeclarations: allGameTools }],
-      },
-    });
-  }
-
-  return buildResponse(response, ctx, state, routerResult);
+  // Use buildResponse for consistent handling
+  return buildResponse(response, ctx, state);
 };
 
 /**
@@ -570,8 +457,7 @@ Analyze this action, use appropriate tools to update game state, then provide na
 const buildResponse = (
   data: any,
   ctx: ExecutionContext,
-  state: GameState,
-  routerResult: RouterResult | null
+  state: GameState
 ): OrchestratorResponse => {
   const finalCandidate = data.candidates?.[0];
   const textParts = finalCandidate?.content?.parts?.filter((part: any) => part.text) || [];
