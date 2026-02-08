@@ -3,6 +3,7 @@ import { config } from "../config";
 import { getNextKey, markKeyRateLimited, markKeyDead } from "../utils/keyPool";
 
 const FALLBACK_IMAGE_URL = "https://placehold.co/1024x1024/png?text=AM";
+const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
 
 export const generateImage = async (prompt: string) => {
   const safePrompt = prompt.trim().slice(0, 400);
@@ -52,5 +53,39 @@ export const generateImage = async (prompt: string) => {
     }
   }
 
-  return { imageUrl: fallback };
+    console.warn("[ImageService] ⚠️ No image data in response");
+    return null;
+  } catch (error: any) {
+    console.error("[ImageService] ❌ Google AI Studio error:", error.message);
+    return null;
+  }
+};
+
+/**
+ * Главная функция генерации изображений
+ */
+export const generateImage = async (prompt: string) => {
+  const safePrompt = prompt.trim().slice(0, 400);
+  const encoded = encodeURIComponent(safePrompt);
+  const fallback = safePrompt
+    ? `https://placehold.co/1024x1024/png?text=${encoded}`
+    : FALLBACK_IMAGE_URL;
+
+  if (!safePrompt) {
+    return { imageUrl: fallback };
+  }
+
+  let imageUrl: string | null = null;
+
+  // Пробуем Vertex AI если включен
+  if (config.useVertexAI && config.vertexAIApiKey) {
+    imageUrl = await generateImageVertexAI(safePrompt);
+  }
+  
+  // Fallback на Google AI Studio
+  if (!imageUrl && config.geminiApiKey) {
+    imageUrl = await generateImageStudio(safePrompt);
+  }
+
+  return { imageUrl: imageUrl || fallback };
 };

@@ -164,20 +164,42 @@ Ending types:
 export const generateSceneImageTool: FunctionDeclaration = {
   name: "generate_scene_image",
   description: `Generates a visual representation of the current scene.
-ALWAYS call this to create atmosphere. Describe the scene visually in English.`,
+ALWAYS call this to create atmosphere. Describe the scene visually in English.
+IMPORTANT: Track environment details (materials, lighting, atmosphere) to maintain visual continuity.
+If player moves within the same area, keep similar environmental elements.
+Only change environment dramatically when the story explicitly moves to a completely new place.`,
   parameters: {
     type: Type.OBJECT,
     properties: {
+      location: {
+        type: Type.STRING,
+        description: "Current location name (e.g., 'spaceship_corridor', 'ancient_temple', 'underground_cave'). Keep consistent unless player explicitly moves to a new area.",
+      },
+      materials: {
+        type: Type.ARRAY,
+        description: "Materials visible in the scene (e.g., ['metal', 'rust'], ['stone', 'moss'], ['flesh', 'bone']). Keep consistent within same location type.",
+        items: {
+          type: Type.STRING,
+        },
+      },
+      lighting: {
+        type: Type.STRING,
+        description: "Lighting condition (e.g., 'dim_red_emergency', 'flickering_torches', 'complete_darkness', 'harsh_white'). Should change gradually, not suddenly.",
+      },
+      atmosphere: {
+        type: Type.STRING,
+        description: "Overall atmosphere (e.g., 'claustrophobic', 'vast_empty', 'oppressive', 'eerie_quiet'). Should evolve naturally with the story.",
+      },
       visualDescription: {
         type: Type.STRING,
-        description: "English description of the scene for image generation. Include: setting, lighting, mood, key objects. 1-3 sentences.",
+        description: "English description of the scene for image generation. Include: setting, key objects, mood. 1-3 sentences. Build upon previous environment if player hasn't moved far.",
       },
       style: {
         type: Type.STRING,
         description: "Visual style hint: horror, dark_sci_fi, body_horror, psychological, or surreal",
       },
     },
-    required: ["visualDescription"],
+    required: ["location", "materials", "lighting", "atmosphere", "visualDescription"],
   },
 };
 

@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url))
       }
-    }
+    },
+    base: "/gemini-hackathon-dnd-project/"
   }
 })

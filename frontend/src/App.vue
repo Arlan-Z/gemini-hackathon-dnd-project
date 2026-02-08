@@ -268,9 +268,18 @@ onMounted(() => {
           >
             Инициализировать
           </button>
-          <div v-if="store.gameState?.isGameOver" class="ml-auto flex items-center gap-2 text-red-400">
-            <Skull class="w-4 h-4" />
-            <span>Конец игры</span>
+          <div v-if="store.gameState?.isGameOver" class="ml-auto flex items-center gap-3">
+            <div class="flex items-center gap-2 text-red-400">
+              <Skull class="w-4 h-4" />
+              <span>Конец игры</span>
+            </div>
+            <button
+              type="button"
+              class="action-btn action-neutral"
+              @click="store.restartGame()"
+            >
+              Начать заново
+            </button>
           </div>
         </section>
       </main>

@@ -295,6 +295,49 @@ export const executeGenerateSceneImage = (
 ): ToolResult => {
   const style = (args.style as string) || "horror";
 
+  // Validate location parameter
+  const locationValidation = validateNonEmptyString(args.location, "location");
+  if (!locationValidation.valid) {
+    return {
+      success: false,
+      message: locationValidation.error,
+    };
+  }
+
+  const location = locationValidation.trimmed;
+
+  // Validate materials array
+  const materials = Array.isArray(args.materials) 
+    ? (args.materials as string[]).filter(m => typeof m === "string" && m.trim())
+    : [];
+  
+  if (materials.length === 0) {
+    return {
+      success: false,
+      message: "Invalid or missing 'materials' parameter. Must be a non-empty array of strings.",
+    };
+  }
+
+  // Validate lighting
+  const lightingValidation = validateNonEmptyString(args.lighting, "lighting");
+  if (!lightingValidation.valid) {
+    return {
+      success: false,
+      message: lightingValidation.error,
+    };
+  }
+  const lighting = lightingValidation.trimmed;
+
+  // Validate atmosphere
+  const atmosphereValidation = validateNonEmptyString(args.atmosphere, "atmosphere");
+  if (!atmosphereValidation.valid) {
+    return {
+      success: false,
+      message: atmosphereValidation.error,
+    };
+  }
+  const atmosphere = atmosphereValidation.trimmed;
+
   // Validate visualDescription parameter
   const descValidation = validateNonEmptyString(args.visualDescription, "visualDescription");
   if (!descValidation.valid) {
@@ -306,13 +349,65 @@ export const executeGenerateSceneImage = (
 
   const visualDescription = descValidation.trimmed;
 
+  // Сохраняем предыдущее окружение
+  const previousEnvironment = ctx.state.environment;
+  const previousLocation = ctx.state.currentLocation;
+
+  // Обновляем окружение в состоянии игры
+  ctx.state.environment = {
+    location,
+    materials,
+    lighting,
+    atmosphere,
+  };
+  ctx.state.currentLocation = location;
+
+  // Добавляем в историю локаций
+  if (!ctx.state.locationHistory) {
+    ctx.state.locationHistory = [];
+  }
+  if (!ctx.state.locationHistory.includes(location)) {
+    ctx.state.locationHistory.push(location);
+  }
+
+  // Создаем промпт с учетом контекста окружения
+  let contextualPrompt = visualDescription;
+  
+  // Добавляем детали окружения для связности
+  const materialsStr = materials.join(", ");
+  const envDetails = `Materials: ${materialsStr}. Lighting: ${lighting}. Atmosphere: ${atmosphere}`;
+  
+  // Если окружение похоже на предыдущее, подчеркиваем связность
+  if (previousEnvironment && previousLocation === location) {
+    // Проверяем, изменились ли материалы
+    const materialsSame = previousEnvironment.materials.some(m => materials.includes(m));
+    if (materialsSame) {
+      contextualPrompt = `Continuing in ${location} (${envDetails}): ${visualDescription}`;
+    } else {
+      contextualPrompt = `Still in ${location}, but environment changed (${envDetails}): ${visualDescription}`;
+    }
+  } else if (previousLocation && previousLocation !== location) {
+    contextualPrompt = `Transitioning from ${previousLocation} to ${location} (${envDetails}): ${visualDescription}`;
+  } else {
+    contextualPrompt = `Starting location ${location} (${envDetails}): ${visualDescription}`;
+  }
+
   // Сохраняем промпт для последующей генерации
-  ctx.imagePrompt = `${visualDescription}, ${style} style, cinematic lighting, detailed`;
+  ctx.imagePrompt = `${contextualPrompt}, ${style} style, cinematic lighting, detailed, atmospheric`;
 
   return {
     success: true,
-    message: `Scene image queued for generation: "${visualDescription}"`,
-    data: { imagePrompt: ctx.imagePrompt, style },
+    message: `Scene image queued for generation in "${location}" with materials [${materialsStr}], lighting: ${lighting}, atmosphere: ${atmosphere}`,
+    data: { 
+      imagePrompt: ctx.imagePrompt, 
+      style,
+      location,
+      materials,
+      lighting,
+      atmosphere,
+      previousLocation,
+      previousEnvironment,
+    },
   };
 };
 
