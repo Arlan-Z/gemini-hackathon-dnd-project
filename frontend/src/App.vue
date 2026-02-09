@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { Radio } from 'lucide-vue-next'
 import { useGameStore } from './stores/game'
 import AppHeader from './components/AppHeader.vue'
@@ -11,14 +11,11 @@ import GameOverOverlay from './components/GameOverOverlay.vue'
 
 const store = useGameStore()
 
-const selectedItemId = ref<string | null>(null)
-
 const chooseAction = async (choiceText: string) => {
   if (store.loading || store.gameState?.isGameOver) {
     return
   }
-  await store.sendAction(choiceText, selectedItemId.value ?? undefined)
-  selectedItemId.value = null
+  await store.sendAction(choiceText)
 }
 
 const startGame = async () => {
@@ -61,10 +58,7 @@ onMounted(() => {
           :image-prompt="store.gameState?.image_prompt"
         />
 
-        <InventoryPanel
-          v-model:selectedItemId="selectedItemId"
-          :inventory="store.gameState?.inventory"
-        />
+        <InventoryPanel :inventory="store.gameState?.inventory" />
 
         <ActionsPanel
           :choices="store.gameState?.choices"
