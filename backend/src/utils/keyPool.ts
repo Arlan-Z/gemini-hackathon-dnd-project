@@ -1,10 +1,3 @@
-/**
- * API Key Pool — round-robin ротация ключей Gemini API.
- *
- * Ключи задаются через GEMINI_API_KEYS (через запятую) или GEMINI_API_KEY (один).
- * При 429 ключ помечается "остывающим" и пропускается до истечения cooldown.
- */
-
 import { config } from "../config";
 
 interface KeyState {
@@ -37,7 +30,6 @@ export const getNextKey = (): string => {
   const now = Date.now();
   const len = pool.length;
 
-  // First pass: find a live key that's not on cooldown
   for (let i = 0; i < len; i++) {
     const idx = (cursor + i) % len;
     if (!pool[idx].dead && pool[idx].cooldownUntil <= now) {
@@ -46,7 +38,6 @@ export const getNextKey = (): string => {
     }
   }
 
-  // Second pass: find any live key (even on cooldown)
   let earliest = -1;
   for (let i = 0; i < len; i++) {
     if (pool[i].dead) continue;

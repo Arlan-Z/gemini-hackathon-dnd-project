@@ -3,7 +3,6 @@ export async function getCleanJson(model: any, prompt: string, retries = 3): Pro
         try {
             const result = await model.generateContent(prompt);
             let text = result.response.text();
-            // Очистка от маркдауна, если ИИ вернул ```json ... ```
             text = text.replace(/```json/g, "").replace(/```/g, ""); 
             return JSON.parse(text);
         } catch (error) {

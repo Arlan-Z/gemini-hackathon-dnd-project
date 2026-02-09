@@ -10,15 +10,10 @@ import {
 import { generateImage } from "../services/imageService";
 import { actionRequestSchema } from "../models/schemas";
 import type { ChoiceCheckResult, ChoiceOption, ChoicePayload, GameState } from "../models/types";
-
-// Используем объединенный orchestrator с поддержкой Vertex AI и Google AI Studio
 import { processPlayerAction } from "../services/orchestratorService";
 
 const router = Router();
 
-/**
- * POST /start - Начать новую игру
- */
 router.post("/start", async (_req, res, next) => {
   try {
     const { sessionId, state, intro } = createSession();
@@ -31,7 +26,6 @@ router.post("/start", async (_req, res, next) => {
       image_prompt: intro.image_prompt,
       image_url: image?.imageUrl || null,
       state: serializeState(state),
-      // Метаданные оркестрации (для отладки/демо)
       orchestration: {
         mode: "intro",
         toolCalls: [],
@@ -42,9 +36,6 @@ router.post("/start", async (_req, res, next) => {
   }
 });
 
-/**
- * POST /action - Обработать действие игрока через оркестратор
- */
 router.post("/action", async (req, res, next) => {
   try {
     const { sessionId, action } = actionRequestSchema.parse(req.body);
@@ -65,15 +56,12 @@ router.post("/action", async (req, res, next) => {
 
     console.log(`[GameController] Processing action for session ${sessionId}: "${action}"`);
 
-    // Инкрементируем счётчик ходов
     state.turn = (state.turn ?? 0) + 1;
 
     const choiceCheck = resolveChoiceCheck(state, action);
 
-    // Используем оркестратор вместо прямого вызова AI
     const orchestratorResponse = await processPlayerAction(state, action, choiceCheck);
 
-    // Генерируем изображение если есть промпт
     let imageUrl: string | null = null;
     if (orchestratorResponse.imagePrompt) {
       try {
@@ -84,10 +72,8 @@ router.post("/action", async (req, res, next) => {
       }
     }
 
-    // Формируем stat_updates из tool calls для совместимости с фронтендом
     const statUpdates = extractStatUpdates(orchestratorResponse.toolCalls);
 
-    // Prepare response object before updating history
     const responsePayload = {
       sessionId,
       story_text: orchestratorResponse.storyText,
@@ -96,7 +82,6 @@ router.post("/action", async (req, res, next) => {
       image_prompt: orchestratorResponse.imagePrompt,
       image_url: imageUrl,
       state: serializeState(state),
-      // Метаданные оркестрации (для отладки/демо)
       orchestration: {
         mode: "function_calling",
         toolCalls: orchestratorResponse.toolCalls.map((tc) => ({
@@ -110,10 +95,8 @@ router.post("/action", async (req, res, next) => {
       },
     };
 
-    // Update pending choices for deterministic checks on next turn
     state.pendingChoices = normalizePendingChoices(orchestratorResponse.choices);
 
-    // Only update history after successfully preparing the response
     pushHistoryEntry(state, { role: "user", parts: action });
     pushHistoryEntry(state, { role: "model", parts: orchestratorResponse.storyText });
 
@@ -123,7 +106,6 @@ router.post("/action", async (req, res, next) => {
       res.status(400).json({ error: "Invalid request payload", issues: error.issues });
       return;
     }
-    // Return 429 to client instead of 500 on rate limit
     const msg = String((error as Record<string, unknown>)?.message ?? "");
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
       res.status(429).json({
@@ -184,9 +166,6 @@ const resolveChoiceCheck = (
   };
 };
 
-/**
- * Извлекает изменения статов из логов вызовов инструментов
- */
 const extractStatUpdates = (
   toolCalls: Array<{
     toolName: string;
@@ -198,16 +177,12 @@ const extractStatUpdates = (
 
   for (const call of toolCalls) {
     if (call.toolName === "update_player_stats" && call.result.success) {
-      // Prefer the normalized appliedDelta from the tool result; fall back to raw args
-      // if appliedDelta is missing or not an object. This defends against partially
-      // malformed tool responses while still surfacing best-effort stat changes.
       const source =
         call.result.appliedDelta && typeof call.result.appliedDelta === "object"
           ? call.result.appliedDelta
           : call.args;
 
       if (!source || typeof source !== "object") {
-        // Skip this call if we cannot safely read stat fields from the source.
         continue;
       }
 
@@ -234,20 +209,15 @@ const extractStatUpdates = (
   return updates;
 };
 
-/**
- * POST /restart - Рестарт игры (удаляет старую сессию и создает новую)
- */
 router.post("/restart", async (req, res, next) => {
   try {
     const { sessionId } = req.body;
 
-    // Удаляем старую сессию если она есть
     if (sessionId) {
       deleteSession(sessionId);
       console.log(`[GameController] Deleted session ${sessionId}`);
     }
 
-    // Создаем новую сессию
     const { sessionId: newSessionId, state, intro } = createSession();
     const image = await generateImage(intro.image_prompt);
 

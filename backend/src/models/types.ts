@@ -42,10 +42,10 @@ export interface HistoryMessage {
 }
 
 export interface EnvironmentContext {
-  location: string; // Название локации (например, "spaceship_corridor")
-  materials: string[]; // Материалы окружения (metal, stone, organic, etc.)
-  lighting: string; // Освещение (dim_red, bright_white, darkness, etc.)
-  atmosphere: string; // Атмосфера (claustrophobic, vast, eerie, etc.)
+  location: string;
+  materials: string[];
+  lighting: string;
+  atmosphere: string;
 }
 
 export interface GameState {
@@ -55,10 +55,10 @@ export interface GameState {
   history: HistoryMessage[];
   isGameOver: boolean;
   turn: number;
-  currentLocation?: string; // Текущая локация для связности изображений
-  locationHistory?: string[]; // История локаций
-  environment?: EnvironmentContext; // Детальный контекст окружения
-  pendingChoices?: ChoiceOption[]; // Последние варианты с условиями (серверное состояние)
+  currentLocation?: string;
+  locationHistory?: string[];
+  environment?: EnvironmentContext;
+  pendingChoices?: ChoiceOption[];
 }
 
 export interface AIResponse {

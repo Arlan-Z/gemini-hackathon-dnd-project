@@ -6,9 +6,6 @@ import { getCachedImageUrl, storeImageInCache } from "./imageCacheService";
 const FALLBACK_IMAGE_URL = "https://placehold.co/1024x1024/png?text=AM";
 const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
 
-/**
- * Генерация изображения через Vertex AI с API Key
- */
 const generateImageVertexAI = async (prompt: string): Promise<string | null> => {
   if (!config.vertexAIApiKey) {
     console.warn("[ImageService] VERTEX_AI_API_KEY not set");
@@ -61,9 +58,6 @@ const generateImageVertexAI = async (prompt: string): Promise<string | null> => 
   }
 };
 
-/**
- * Генерация изображения через Google AI Studio с key rotation
- */
 const generateImageStudio = async (prompt: string): Promise<string | null> => {
   console.log(`[ImageService] Using Google AI Studio`);
   console.log(`[ImageService] Model: ${config.geminiImageModel}`);
@@ -110,9 +104,6 @@ const generateImageStudio = async (prompt: string): Promise<string | null> => {
   return null;
 };
 
-/**
- * Главная функция генерации изображений
- */
 export const generateImage = async (prompt: string) => {
   const safePrompt = prompt.trim().slice(0, 400);
   const encoded = encodeURIComponent(safePrompt);
@@ -132,12 +123,10 @@ export const generateImage = async (prompt: string) => {
 
   let imageUrl: string | null = null;
 
-  // Пробуем Vertex AI если включен
   if (config.useVertexAI && config.vertexAIApiKey) {
     imageUrl = await generateImageVertexAI(safePrompt);
   }
   
-  // Fallback на Google AI Studio
   if (!imageUrl && config.geminiApiKey) {
     imageUrl = await generateImageStudio(safePrompt);
   }

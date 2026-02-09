@@ -1,8 +1,3 @@
-/**
- * Vertex AI с API Key (без Service Account)
- * Использует прямые HTTP запросы к Vertex AI REST API
- */
-
 import { config } from "../config";
 
 const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
@@ -24,9 +19,6 @@ interface VertexAIRequest {
   tools?: any[];
 }
 
-/**
- * Генерация текста через Vertex AI с API Key
- */
 export const generateContentVertexAI = async (
   model: string,
   request: VertexAIRequest
@@ -49,9 +41,6 @@ export const generateContentVertexAI = async (
   return response.json();
 };
 
-/**
- * Streaming генерация (для будущего)
- */
 export const streamGenerateContentVertexAI = async (
   model: string,
   request: VertexAIRequest
@@ -78,11 +67,7 @@ export const streamGenerateContentVertexAI = async (
   return response.body;
 };
 
-/**
- * Генерация изображения через Vertex AI Imagen
- */
 export const generateImageVertexAI = async (prompt: string): Promise<string | null> => {
-  // Imagen использует другой endpoint
   const model = config.geminiImageModel || "imagen-3.0-generate-001";
   const url = `${VERTEX_AI_BASE_URL}/publishers/google/models/${model}:predict?key=${config.vertexAIApiKey}`;
 
@@ -112,7 +97,6 @@ export const generateImageVertexAI = async (prompt: string): Promise<string | nu
 
     const data = await response.json();
     
-    // Imagen возвращает base64 в predictions[0].bytesBase64Encoded
     const imageBase64 = data.predictions?.[0]?.bytesBase64Encoded;
     
     if (imageBase64) {

@@ -35,7 +35,7 @@ export const createSession = () => {
     history: [{ role: "model", parts: INTRO_TEXT }],
     isGameOver: false,
     turn: 0,
-    currentLocation: "metal_capsule", // Начальная локация
+    currentLocation: "metal_capsule",
     locationHistory: ["metal_capsule"],
     environment: {
       location: "metal_capsule",
@@ -90,7 +90,6 @@ const pushHistory = (state: GameState, entry: GameState["history"][number]) => {
   }
 };
 
-// Экспортируемая версия для использования в контроллере
 export const pushHistoryEntry = pushHistory;
 
 export const applyAiResponse = (

@@ -1,13 +1,5 @@
-/**
- * Game Tools - Function Declarations for Gemini Function Calling
- * 
- * Gemini использует эти инструменты как "кнопки" для управления игровой логикой.
- * Вся детерминированная логика выполняется на сервере, а не галлюцинациями ИИ.
- */
-
 import { FunctionDeclaration, Type } from "@google/genai";
 
-// Tool: Обновление статов игрока
 export const updatePlayerStatsTool: FunctionDeclaration = {
   name: "update_player_stats",
   description: `Updates player stats (HP, sanity, strength, intelligence, dexterity) based on in-game consequences.
@@ -49,7 +41,6 @@ Use this when:
   },
 };
 
-// Tool: Управление инвентарем
 export const inventoryActionTool: FunctionDeclaration = {
   name: "inventory_action",
   description: `Manages player inventory - add or remove items.
@@ -82,7 +73,6 @@ Use when:
   },
 };
 
-// Tool: Добавление тегов состояния
 export const addTagTool: FunctionDeclaration = {
   name: "add_tag",
   description: `Adds a narrative tag to track story state and player conditions.
@@ -107,7 +97,6 @@ Use for:
   },
 };
 
-// Tool: Удаление тегов
 export const removeTagTool: FunctionDeclaration = {
   name: "remove_tag",
   description: `Removes a narrative tag when condition ends.
@@ -131,7 +120,6 @@ Use when:
   },
 };
 
-// Tool: Триггер Game Over
 export const triggerGameOverTool: FunctionDeclaration = {
   name: "trigger_game_over",
   description: `Triggers game over state. Use ONLY when player should die or game should end.
@@ -160,7 +148,6 @@ Ending types:
   },
 };
 
-// Tool: Генерация изображения сцены
 export const generateSceneImageTool: FunctionDeclaration = {
   name: "generate_scene_image",
   description: `Generates a visual representation of the current scene.
@@ -203,7 +190,6 @@ Only change environment dramatically when the story explicitly moves to a comple
   },
 };
 
-// Все инструменты для экспорта
 export const allGameTools: FunctionDeclaration[] = [
   updatePlayerStatsTool,
   inventoryActionTool,

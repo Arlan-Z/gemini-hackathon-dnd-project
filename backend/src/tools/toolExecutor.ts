@@ -1,10 +1,3 @@
-/**
- * Tool Executor - Выполняет вызовы функций от Gemini
- * 
- * Это "руки" оркестратора. Gemini решает ЧТО делать,
- * а этот модуль выполняет действия детерминированно.
- */
-
 import { v4 as uuidv4 } from "uuid";
 import { GameState, InventoryItem } from "../models/types";
 
@@ -21,7 +14,6 @@ export interface ToolCallLog {
   timestamp: number;
 }
 
-// Контекст выполнения инструментов для одного хода
 export interface ExecutionContext {
   state: GameState;
   toolCalls: ToolCallLog[];
@@ -33,9 +25,6 @@ export interface ExecutionContext {
 const clamp = (value: number, min: number, max: number) => 
   Math.max(min, Math.min(max, value));
 
-/**
- * Validates that a value is a non-empty, non-whitespace string
- */
 const validateNonEmptyString = (
   value: unknown,
   paramName: string
@@ -49,9 +38,6 @@ const validateNonEmptyString = (
   return { valid: true, trimmed: value.trim() };
 };
 
-/**
- * Выполняет update_player_stats
- */
 export const executeUpdatePlayerStats = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
@@ -98,16 +84,12 @@ export const executeUpdatePlayerStats = (
   };
 };
 
-/**
- * Выполняет inventory_action
- */
 export const executeInventoryAction = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
   
-  // Validate required 'action' parameter
   if (typeof args.action !== "string" || !args.action.trim()) {
     return {
       success: false,
@@ -117,7 +99,6 @@ export const executeInventoryAction = (
   
   const action = args.action.trim().toLowerCase();
   
-  // Validate required 'itemName' parameter
   if (typeof args.itemName !== "string" || !args.itemName.trim()) {
     return {
       success: false,
@@ -170,16 +151,12 @@ export const executeInventoryAction = (
   };
 };
 
-/**
- * Выполняет add_tag
- */
 export const executeAddTag = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
 
-  // Validate required 'tag' parameter
   const tagValidation = validateNonEmptyString(args.tag, "tag");
   if (!tagValidation.valid) {
     return {
@@ -208,16 +185,12 @@ export const executeAddTag = (
   };
 };
 
-/**
- * Выполняет remove_tag
- */
 export const executeRemoveTag = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
   const { state } = ctx;
 
-  // Validate required 'tag' parameter
   const tagValidation = validateNonEmptyString(args.tag, "tag");
   if (!tagValidation.valid) {
     return {
@@ -247,14 +220,10 @@ export const executeRemoveTag = (
   };
 };
 
-/**
- * Выполняет trigger_game_over
- */
 export const executeTriggerGameOver = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
-  // Validate endingType parameter
   const endingTypeValidation = validateNonEmptyString(args.endingType, "endingType");
   if (!endingTypeValidation.valid) {
     return {
@@ -263,7 +232,6 @@ export const executeTriggerGameOver = (
     };
   }
 
-  // Validate deathDescription parameter
   const descValidation = validateNonEmptyString(args.deathDescription, "deathDescription");
   if (!descValidation.valid) {
     return {
@@ -286,16 +254,12 @@ export const executeTriggerGameOver = (
   };
 };
 
-/**
- * Выполняет generate_scene_image
- */
 export const executeGenerateSceneImage = (
   ctx: ExecutionContext,
   args: Record<string, unknown>
 ): ToolResult => {
   const style = (args.style as string) || "horror";
 
-  // Validate location parameter
   const locationValidation = validateNonEmptyString(args.location, "location");
   if (!locationValidation.valid) {
     return {
@@ -306,7 +270,6 @@ export const executeGenerateSceneImage = (
 
   const location = locationValidation.trimmed;
 
-  // Validate materials array
   const materials = Array.isArray(args.materials) 
     ? (args.materials as string[]).filter(m => typeof m === "string" && m.trim())
     : [];
@@ -318,7 +281,6 @@ export const executeGenerateSceneImage = (
     };
   }
 
-  // Validate lighting
   const lightingValidation = validateNonEmptyString(args.lighting, "lighting");
   if (!lightingValidation.valid) {
     return {
@@ -328,7 +290,6 @@ export const executeGenerateSceneImage = (
   }
   const lighting = lightingValidation.trimmed;
 
-  // Validate atmosphere
   const atmosphereValidation = validateNonEmptyString(args.atmosphere, "atmosphere");
   if (!atmosphereValidation.valid) {
     return {
@@ -338,7 +299,6 @@ export const executeGenerateSceneImage = (
   }
   const atmosphere = atmosphereValidation.trimmed;
 
-  // Validate visualDescription parameter
   const descValidation = validateNonEmptyString(args.visualDescription, "visualDescription");
   if (!descValidation.valid) {
     return {
@@ -349,11 +309,9 @@ export const executeGenerateSceneImage = (
 
   const visualDescription = descValidation.trimmed;
 
-  // Сохраняем предыдущее окружение
   const previousEnvironment = ctx.state.environment;
   const previousLocation = ctx.state.currentLocation;
 
-  // Обновляем окружение в состоянии игры
   ctx.state.environment = {
     location,
     materials,
@@ -362,7 +320,6 @@ export const executeGenerateSceneImage = (
   };
   ctx.state.currentLocation = location;
 
-  // Добавляем в историю локаций
   if (!ctx.state.locationHistory) {
     ctx.state.locationHistory = [];
   }
@@ -370,16 +327,12 @@ export const executeGenerateSceneImage = (
     ctx.state.locationHistory.push(location);
   }
 
-  // Создаем промпт с учетом контекста окружения
   let contextualPrompt = visualDescription;
   
-  // Добавляем детали окружения для связности
   const materialsStr = materials.join(", ");
   const envDetails = `Materials: ${materialsStr}. Lighting: ${lighting}. Atmosphere: ${atmosphere}`;
   
-  // Если окружение похоже на предыдущее, подчеркиваем связность
   if (previousEnvironment && previousLocation === location) {
-    // Проверяем, изменились ли материалы
     const materialsSame = previousEnvironment.materials.some(m => materials.includes(m));
     if (materialsSame) {
       contextualPrompt = `Continuing in ${location} (${envDetails}): ${visualDescription}`;
@@ -392,7 +345,6 @@ export const executeGenerateSceneImage = (
     contextualPrompt = `Starting location ${location} (${envDetails}): ${visualDescription}`;
   }
 
-  // Сохраняем промпт для последующей генерации
   ctx.imagePrompt = `${contextualPrompt}, ${style} style, cinematic lighting, detailed, atmospheric`;
 
   return {
@@ -411,9 +363,6 @@ export const executeGenerateSceneImage = (
   };
 };
 
-/**
- * Главный диспетчер инструментов
- */
 export const executeTool = (
   ctx: ExecutionContext,
   toolName: string,
@@ -447,7 +396,6 @@ export const executeTool = (
       };
   }
 
-  // Логируем вызов
   ctx.toolCalls.push({
     toolName,
     args,
@@ -458,9 +406,6 @@ export const executeTool = (
   return result;
 };
 
-/**
- * Создает новый контекст выполнения
- */
 export const createExecutionContext = (state: GameState): ExecutionContext => ({
   state,
   toolCalls: [],

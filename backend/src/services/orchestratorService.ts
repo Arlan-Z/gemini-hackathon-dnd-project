@@ -1,12 +1,3 @@
-/**
- * Orchestrator Service - Агентская оркестрация с Gemini Function Calling
- * 
- * Оптимизированная версия:
- * - Router (classifyIntent) для подсказок оркестратору
- * - Key pool с round-robin ротацией
- * - Retry с backoff на 429
- */
-
 import { GoogleGenAI, Content, FunctionCallingConfigMode, createPartFromFunctionResponse } from "@google/genai";
 import { config } from "../config";
 import { ChoiceCheckResult, ChoicePayload, GameState } from "../models/types";
@@ -61,7 +52,6 @@ const isCacheValid = (entry: CacheEntry) => {
   if (!entry.expiresAt) {
     return true;
   }
-  // Avoid edge case where cache expires mid-request
   return Date.now() + 15_000 < entry.expiresAt;
 };
 
@@ -295,9 +285,6 @@ Environment Context:${environmentInfo}
 Game Over: ${state.isGameOver}`;
 };
 
-/**
- * Конвертирует историю в формат Gemini Content
- */
 const buildContents = (
   state: GameState,
   userAction: string,
@@ -306,7 +293,6 @@ const buildContents = (
 ): Content[] => {
   const contents: Content[] = [];
 
-  // Добавляем историю (последние 8 записей)
   for (const entry of state.history.slice(-8)) {
     contents.push({
       role: entry.role === "user" ? "user" : "model",
@@ -441,19 +427,11 @@ export interface OrchestratorResponse {
   gameOverDescription: string | null;
 }
 
-/**
- * Создаёт одноразовый клиент GoogleGenAI с ключом из пула.
- * Возвращает клиент и ключ (для пометки при 429).
- */
 const getAIClient = (): { ai: GoogleGenAI; apiKey: string } => {
   const apiKey = getNextKey();
   return { ai: new GoogleGenAI({ apiKey }), apiKey };
 };
 
-/**
- * Вызов generateContent с retry и key rotation.
- * При невалидном ключе — помечает его мёртвым и ретраит с новым.
- */
 type GenerateParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
 type GenerateParamsFactory = (
   ai: GoogleGenAI,
@@ -488,9 +466,6 @@ const generateWithRetry = async (
   throw new Error(`${label}: all attempted keys were invalid`);
 };
 
-/**
- * Главная функция оркестрации - автоматически выбирает между Vertex AI и Google AI Studio
- */
 export const processPlayerAction = async (
   state: GameState,
   userAction: string,
@@ -509,9 +484,6 @@ export const processPlayerAction = async (
   }
 };
 
-/**
- * Обработка через Vertex AI с API Key
- */
 const processPlayerActionVertexAI = async (
   state: GameState,
   userAction: string,
@@ -614,9 +586,6 @@ Analyze this action, use appropriate tools to update game state, then provide th
   return buildResponse(data, ctx, state);
 };
 
-/**
- * Обработка через Google AI Studio
- */
 const processPlayerActionGoogleAI = async (
   state: GameState,
   userAction: string,
@@ -625,7 +594,6 @@ const processPlayerActionGoogleAI = async (
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
-  // Построение контекста с подсказками роутера
   const contents = buildContents(state, userAction, routerContext.hints, choiceCheckInfo);
   const baseConfig = {
     temperature: 0.9,
@@ -658,7 +626,6 @@ const processPlayerActionGoogleAI = async (
     return { ...finalConfig, systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT };
   };
 
-  // Первый вызов с retry
   let response = await generateWithRetry(
     async (ai, apiKey) => ({
       model: config.geminiModel,
@@ -716,7 +683,6 @@ const processPlayerActionGoogleAI = async (
       parts: functionResponseParts,
     });
 
-    // Следующая итерация с retry
     response = await generateWithRetry(
       async (ai, apiKey) => ({
         model: config.geminiModel,
@@ -753,7 +719,6 @@ const processPlayerActionGoogleAI = async (
     );
   }
 
-  // Use buildResponse for consistent handling
   return buildResponse(response, ctx, state);
 };
 
@@ -776,9 +741,6 @@ const parseStructuredOutput = (
   }
 };
 
-/**
- * Построение финального ответа
- */
 const buildResponse = (
   data: any,
   ctx: ExecutionContext,

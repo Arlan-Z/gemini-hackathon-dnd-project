@@ -1,25 +1,16 @@
-/**
- * Router Service - Классификация намерений игрока
- * 
- * Первый этап оркестрации: определяем тип действия игрока
- * и направляем к соответствующему обработчику.
- * 
- * Это реализация паттерна "Router & Solvers" для robust systems.
- */
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { config } from "../config";
 import { GameState } from "../models/types";
 
 export type IntentType = 
-  | "exploration"      // Осмотр, исследование
-  | "combat"           // Бой, атака
-  | "dialogue"         // Разговор, взаимодействие с NPC
-  | "item_use"         // Использование предмета
-  | "self_harm"        // Самоповреждение, суицид
-  | "escape_attempt"   // Попытка побега
-  | "rest"             // Отдых, восстановление
-  | "unknown";         // Неопределенное действие
+  | "exploration"
+  | "combat"
+  | "dialogue"
+  | "item_use"
+  | "self_harm"
+  | "escape_attempt"
+  | "rest"
+  | "unknown";
 
 export interface RouterResult {
   intent: IntentType;
@@ -101,9 +92,6 @@ const routerFunctionDeclaration = {
   },
 };
 
-/**
- * Классифицирует намерение игрока
- */
 export const classifyIntent = async (
   state: GameState,
   userAction: string
@@ -118,7 +106,7 @@ Game Over: ${state.isGameOver}`;
 
   try {
     const response = await ai.models.generateContent({
-      model: config.geminiModel, // Быстрая модель для роутинга
+      model: config.geminiModel,
       contents: [{
         role: "user",
         parts: [{
@@ -127,7 +115,7 @@ Game Over: ${state.isGameOver}`;
       }],
       config: {
         systemInstruction: ROUTER_SYSTEM_PROMPT,
-        temperature: 0.3, // Низкая температура для консистентности
+        temperature: 0.3,
         tools: [{ functionDeclarations: [routerFunctionDeclaration] }],
       },
     });
@@ -155,7 +143,6 @@ Game Over: ${state.isGameOver}`;
       const isValidDifficulty = (
         value: unknown,
       ): value is RouterResult["suggestedDifficulty"] => {
-        // Allowed difficulty levels for routing; keep in sync with RouterResult type.
         const allowedDifficulties = ["trivial", "easy", "medium", "hard", "deadly"] as const;
         return typeof value === "string" && (allowedDifficulties as readonly string[]).includes(value);
       };
@@ -163,7 +150,6 @@ Game Over: ${state.isGameOver}`;
       const isValidEmotionalTone = (
         value: unknown,
       ): value is RouterResult["emotionalTone"] => {
-        // Allowed emotional tones; keep in sync with RouterResult type.
         const allowedTones = ["neutral", "aggressive", "fearful", "desperate", "cunning"] as const;
         return typeof value === "string" && (allowedTones as readonly string[]).includes(value);
       };
@@ -194,7 +180,6 @@ Game Over: ${state.isGameOver}`;
       };
     }
 
-    // Fallback если function calling не сработал
     return {
       intent: "unknown",
       confidence: 0.5,
@@ -214,13 +199,9 @@ Game Over: ${state.isGameOver}`;
   }
 };
 
-/**
- * Получает модификаторы для оркестратора на основе классификации
- */
 export const getOrchestratorHints = (result: RouterResult): string => {
   const hints: string[] = [];
 
-  // Подсказки по типу намерения
   switch (result.intent) {
     case "self_harm":
       hints.push("CRITICAL: Player is attempting self-harm. Apply severe consequences immediately.");
@@ -244,7 +225,6 @@ export const getOrchestratorHints = (result: RouterResult): string => {
       break;
   }
 
-  // Подсказки по сложности
   switch (result.suggestedDifficulty) {
     case "deadly":
       hints.push("DEADLY action - high chance of severe damage or death.");
@@ -257,7 +237,6 @@ export const getOrchestratorHints = (result: RouterResult): string => {
       break;
   }
 
-  // Подсказки по эмоциональному тону
   if (result.emotionalTone === "desperate") {
     hints.push("Player seems desperate - AM should exploit this weakness.");
   } else if (result.emotionalTone === "cunning") {

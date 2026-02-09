@@ -1,8 +1,3 @@
-/**
- * Retry with backoff for Gemini API 429 errors.
- * On 429, marks key in pool and waits before retrying.
- */
-
 import { markKeyRateLimited, markKeyDead, getNextKey } from "./keyPool";
 
 const isRateLimitError = (error: unknown): boolean => {
@@ -43,7 +38,6 @@ export const withRetry = async <T>(
     try {
       return await fn();
     } catch (error) {
-      // Invalid key — mark dead and throw (caller should create new client with next key)
       if (isInvalidKeyError(error) && apiKey) {
         markKeyDead(apiKey);
         throw error;
