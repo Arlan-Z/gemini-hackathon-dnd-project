@@ -749,8 +749,24 @@ const buildResponse = (
   const finalText = getFinalTextFromResponse(data) || "AM молчит...";
 
   const structured = parseStructuredOutput(finalText);
-  const storyText = structured?.storyText ?? cleanStoryText(finalText);
-  const choices = structured?.choices ?? extractChoices(finalText);
+  let storyText = structured?.storyText ?? cleanStoryText(finalText);
+  let choices = structured?.choices ?? extractChoices(finalText);
+
+  // Special handling for game over - extract story_text from JSON if needed
+  if (ctx.gameOverTriggered && storyText.includes('{') && storyText.includes('story_text')) {
+    try {
+      const storyMatch = finalText.match(/"story_text"\s*:\s*"([^"]+)"/);
+      if (storyMatch && storyMatch[1]) {
+        storyText = storyMatch[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\');
+        console.log("[Orchestrator] Extracted story_text for game over:", storyText);
+      }
+    } catch (e) {
+      console.warn("[Orchestrator] Failed to extract story_text for game over:", e);
+    }
+  }
 
   if (!ctx.gameOverTriggered) {
     if (state.stats.hp <= 0) {
