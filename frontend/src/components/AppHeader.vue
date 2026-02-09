@@ -9,10 +9,10 @@ defineProps<{ sessionId?: string }>()
         <slot name="icon"></slot>
       </div>
       <div>
-        <div class="text-sm uppercase tracking-[0.4em] flicker">Командный центр</div>
-        <div class="text-xs text-green-300/70">ЯДРО AM / ЧЕЛОВЕК</div>
+        <div class="text-sm uppercase tracking-[0.4em] flicker">Command Center</div>
+        <div class="text-xs text-green-300/70">AM CORE / HUMAN</div>
       </div>
     </div>
-    <div class="text-xs text-green-300/60">Сессия: {{ sessionId ?? '---' }}</div>
+    <div class="text-xs text-green-300/60">Session: {{ sessionId ?? '---' }}</div>
   </header>
 </template>

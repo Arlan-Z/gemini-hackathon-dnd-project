@@ -28,7 +28,7 @@ const choiceClass = (type: 'action' | 'aggressive' | 'stealth') => {
 
 <template>
   <section class="col-span-3 panel p-4 flex flex-wrap items-center gap-3">
-    <div class="panel-title w-full">Доступные действия</div>
+    <div class="panel-title w-full">Available actions</div>
     <button
       v-for="choice in props.choices"
       :key="choice.text"
@@ -46,19 +46,19 @@ const choiceClass = (type: 'action' | 'aggressive' | 'stealth') => {
       class="action-btn"
       @click="emit('start')"
     >
-      Инициализировать
+      Initialize
     </button>
     <div v-if="props.isGameOver" class="ml-auto flex items-center gap-3">
       <div class="flex items-center gap-2 text-red-400">
         <Skull class="w-4 h-4" />
-        <span>Конец игры</span>
+        <span>Game over</span>
       </div>
       <button
         type="button"
         class="action-btn action-neutral"
         @click="emit('restart')"
       >
-        Начать заново
+        Restart
       </button>
     </div>
   </section>

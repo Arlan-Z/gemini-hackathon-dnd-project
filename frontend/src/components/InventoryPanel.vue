@@ -24,7 +24,7 @@ const toggleItem = (id: string) => {
 <template>
   <aside class="panel p-4 flex flex-col gap-4">
     <div class="flex items-center justify-between">
-      <div class="panel-title">Инвентарь</div>
+      <div class="panel-title">Inventory</div>
       <Package class="w-4 h-4 text-green-300/70" />
     </div>
 
@@ -41,14 +41,14 @@ const toggleItem = (id: string) => {
         <div class="text-xs text-green-300/60">{{ item.description }}</div>
       </button>
       <div v-if="!props.inventory?.length" class="text-xs text-green-300/50">
-        Пусто
+        Empty
       </div>
     </div>
 
     <div class="border-t border-green-500/30 pt-3 text-xs text-green-300/70">
       <div class="flex items-center gap-2">
         <AlertTriangle class="w-4 h-4 text-amber-300" />
-        <span>Выбрано: {{ selectedItem?.name ?? 'Нет' }}</span>
+        <span>Selected: {{ selectedItem?.name ?? 'None' }}</span>
       </div>
     </div>
   </aside>

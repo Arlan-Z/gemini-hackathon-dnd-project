@@ -44,7 +44,7 @@ const formatTag = (tag: string) => tag.replace(/_/g, ' ')
 <template>
   <aside class="panel p-4 space-y-5">
     <div>
-      <div class="panel-title mb-3">Жизненные показатели</div>
+      <div class="panel-title mb-3">Vital signs</div>
       <div class="space-y-3">
         <div v-for="stat in stats" :key="stat.key" class="space-y-2">
           <div class="flex items-center justify-between text-xs">
@@ -69,7 +69,7 @@ const formatTag = (tag: string) => tag.replace(/_/g, ' ')
       <div class="panel-title mb-2">Tags</div>
       <div class="flex flex-wrap gap-2">
         <span v-if="!props.tags?.length" class="text-xs text-green-300/50">
-          Аномалий нет
+          No anomalies
         </span>
         <span v-for="tag in props.tags" :key="tag" class="tag">
           {{ formatTag(tag) }}

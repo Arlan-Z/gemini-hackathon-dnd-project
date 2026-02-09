@@ -109,7 +109,7 @@ router.post("/action", async (req, res, next) => {
     const msg = String((error as Record<string, unknown>)?.message ?? "");
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
       res.status(429).json({
-        error: "Слишком много запросов. AM задумался... Попробуй через 30 секунд.",
+        error: "Too many requests. AM is thinking... Try again in 30 seconds.",
         retryAfter: 30,
       });
       return;

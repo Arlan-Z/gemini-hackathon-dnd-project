@@ -58,7 +58,7 @@ Use when:
       },
       itemName: {
         type: Type.STRING,
-        description: "Name of the item in Russian",
+        description: "Name of the item in English",
       },
       itemDescription: {
         type: Type.STRING,

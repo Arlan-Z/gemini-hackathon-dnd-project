@@ -31,9 +31,9 @@ watch(
 <template>
   <section class="panel p-4 flex flex-col gap-4">
     <div class="flex items-center justify-between">
-      <div class="panel-title">Сводка событий</div>
+      <div class="panel-title">Event log</div>
       <div class="text-xs text-green-300/60">
-        {{ props.loading ? loadingText : 'Ожидание ввода' }}
+        {{ props.loading ? loadingText : 'Awaiting input' }}
       </div>
     </div>
 
@@ -46,9 +46,9 @@ watch(
         :class="{ glitch: imageGlitch }"
       >
       <div v-else class="text-xs text-green-300/60 uppercase tracking-[0.3em] text-center">
-        [СИГНАЛ ИЗОБРАЖЕНИЯ ПОТЕРЯН]
+        [IMAGE SIGNAL LOST]
         <div class="text-green-400/80 normal-case tracking-normal mt-2">
-          {{ props.imagePrompt ?? 'Сигнал отсутствует' }}
+          {{ props.imagePrompt ?? 'Signal unavailable' }}
         </div>
       </div>
     </div>
@@ -58,7 +58,7 @@ watch(
         {{ displayedText }}
       </p>
       <div class="text-[10px] text-green-300/40 mt-2">
-        Нажмите на текст, чтобы пропустить печать.
+        Click the text to skip typing.
       </div>
     </div>
   </section>

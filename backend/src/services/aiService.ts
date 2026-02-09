@@ -6,7 +6,7 @@ import { AIResponse, GameState } from "../models/types";
 import { parseJsonWithCleanup } from "../utils/jsonParser";
 
 export const SYSTEM_PROMPT =
-  "Ты — безумный суперкомпьютер AM. Твоя цель — мучить игрока. Описывай сцены жестоко и детально. Если игрок делает глупый выбор — наказывай его (снимай HP). Если умный — награждай. Всегда возвращай валидный JSON.";
+  "You are the insane supercomputer AM. Your goal is to torment the player. Describe scenes brutally and in detail. If the player makes a foolish choice, punish them (reduce HP). If a smart one, reward them. Always return valid JSON.";
 
 let cachedModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null =
   null;
@@ -63,20 +63,20 @@ const formatState = (state: GameState) => {
 };
 
 const buildPrompt = (state: GameState, userAction: string) => `
-Ты продолжаешь интерактивную хоррор-историю. Ответ возвращай СТРОГО валидным JSON без Markdown и без комментариев.
-Формат ответа (никаких дополнительных ключей):
+You are continuing an interactive horror story. Return STRICTLY valid JSON with no Markdown and no comments.
+Response format (no additional keys):
 {
-  "story_text": "описание сцены на русском",
+  "story_text": "scene description in English",
   "stat_updates": { "hp": -10, "sanity": -5, "strength": 0, "intelligence": 0, "dexterity": 0 },
-  "choices": ["вариант 1", "вариант 2", "вариант 3"],
+  "choices": ["option 1", "option 2", "option 3"],
   "image_prompt": "english scene description"
 }
 
-Правила:
-- "stat_updates" — это ИЗМЕНЕНИЯ, а не абсолютные значения. Если изменений нет, верни пустой объект {}.
-- "choices" всегда ровно 3, короткие, в повелительном наклонении.
-- "image_prompt" только на английском, 1-2 предложения.
-- Никаких markdown-оберток, только JSON.
+Rules:
+- "stat_updates" are CHANGES, not absolute values. If there are no changes, return an empty object {}.
+- "choices" must always be exactly 3, short, in imperative mood.
+- "image_prompt" must be English only, 1-2 sentences.
+- No markdown wrappers, JSON only.
 
 HISTORY:
 ${formatHistory(state)}

@@ -9,7 +9,7 @@ This project implements a **Deterministic AI Orchestration Engine** using Google
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        PLAYER INPUT                              │
-│                    "Я пью кислоту из банки"                      │
+│                    "I drink acid from a jar"                     │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -41,7 +41,7 @@ This project implements a **Deterministic AI Orchestration Engine** using Google
 ┌──────────────────────────┐   ┌──────────────────────────┐
 │    FUNCTION CALLS        │   │    NARRATIVE OUTPUT      │
 │  ┌────────────────────┐  │   │                          │
-│  │ update_player_stats│  │   │  "Кислота обжигает..."   │
+│  │ update_player_stats│  │   │  "The acid burns..."     │
 │  │ {hp: -100,         │  │   │                          │
 │  │  reason: "acid"}   │  │   │  Choices:                │
 │  ├────────────────────┤  │   │  1. ...                  │

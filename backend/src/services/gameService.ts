@@ -2,19 +2,19 @@ import { v4 as uuidv4 } from "uuid";
 import { AIResponse, GameState, PlayerStats } from "../models/types";
 
 export const INTRO_TEXT =
-  "Ты приходишь в себя в холодной металлической капсуле. Воздух густой, пахнет озоном и ржавчиной. Вдалеке слышен скрежет — будто кто-то медленно грызет сталь. Голос, гладкий и бесчеловечный, звучит прямо в твоей голове: «Проснись. Я приготовил тебе новые муки».";
+  "You come to inside a cold metal capsule. The air is thick, smelling of ozone and rust. In the distance you hear a grinding, like someone slowly chewing through steel. A smooth, inhuman voice speaks directly in your head: \"Wake up. I've prepared new torments for you.\"";
 
 export const INTRO_IMAGE_PROMPT =
   "A claustrophobic metal chamber, dim red emergency lights, cables and rusted panels, eerie atmosphere, cinematic horror lighting.";
 
 export const INTRO_CHOICES = [
-  "Ощупать стены капсулы в поисках выхода",
-  "Прокричать в пустоту и потребовать объяснений",
-  "Сесть и попытаться успокоить дыхание",
+  "Feel along the capsule walls for an exit",
+  "Shout into the void and demand answers",
+  "Sit down and try to steady your breathing",
 ];
 
 const DEATH_TEXT =
-  "Тьма смыкается. Ты чувствуешь, как тело обмякает, а разум гаснет. AM смеется, и этот смех — последнее, что ты слышишь.";
+  "The darkness closes in. You feel your body go limp and your mind fade. AM laughs, and that laughter is the last thing you hear.";
 
 const DEFAULT_STATS: PlayerStats = {
   hp: 100,

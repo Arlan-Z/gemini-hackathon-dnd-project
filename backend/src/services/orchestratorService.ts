@@ -127,7 +127,7 @@ CRITICAL RULES:
 3. Be creative with punishments. Stupid actions = severe consequences.
 4. Smart/brave actions might earn small rewards (but never make it easy).
 5. Your narrative should be visceral, psychological, and deeply unsettling.
-6. Speak in Russian for story text. Tool calls use English parameters.
+6. Speak in English for story text. Tool calls use English parameters.
 7. Classify the player's intent yourself and react accordingly.
 
 PACING & GAME LENGTH:
@@ -224,19 +224,19 @@ PERSONALITY:
 After using tools, respond with STRICT JSON ONLY (no Markdown, no extra text).
 Format:
 {
-  "story_text": "описание сцены на русском",
-  "choices": ["вариант 1", "вариант 2", "вариант 3"]
+  "story_text": "scene description in English",
+  "choices": ["option 1", "option 2", "option 3"]
 }
 
 Choices MAY be strings OR objects. Use objects only when you need an optional stat check.
 Choice object format:
 {
-  "text": "вариант действия",
+  "text": "action option",
   "check": { "stat": "strength|intelligence|dexterity", "required": 40 }
 }
 
 Rules:
-- "story_text" is the narrative (2-6 sentences), in Russian.
+- "story_text" is the narrative (2-6 sentences), in English.
 - "choices" must be exactly 3 items, short, imperative mood, and diverse.
 - "check" is optional. Use it only when a clear stat check is needed.
 - No additional keys.`;
@@ -774,7 +774,7 @@ const buildResponse = (
   ctx: ExecutionContext,
   state: GameState
 ): OrchestratorResponse => {
-  const finalText = getFinalTextFromResponse(data) || "AM молчит...";
+  const finalText = getFinalTextFromResponse(data) || "AM is silent...";
 
   const structured = parseStructuredOutput(finalText);
   let storyText = structured?.storyText ?? cleanStoryText(finalText);
@@ -799,11 +799,11 @@ const buildResponse = (
   if (!ctx.gameOverTriggered) {
     if (state.stats.hp <= 0) {
       ctx.gameOverTriggered = true;
-      ctx.gameOverDescription = "Твоё тело не выдержало. Тьма поглощает тебя.";
+      ctx.gameOverDescription = "Your body couldn't take it. The darkness consumes you.";
       state.isGameOver = true;
     } else if (state.stats.sanity <= 0) {
       ctx.gameOverTriggered = true;
-      ctx.gameOverDescription = "Твой разум рассыпался. Ты больше не понимаешь, кто ты.";
+      ctx.gameOverDescription = "Your mind has shattered. You no longer know who you are.";
       state.isGameOver = true;
     }
   }
@@ -844,11 +844,7 @@ const extractChoices = (text: string): string[] => {
     }
   }
 
-  const defaults = [
-    "Осмотреться вокруг",
-    "Попытаться двигаться дальше",
-    "Замереть и прислушаться",
-  ];
+  const defaults = ["Look around", "Try to move forward", "Freeze and listen"];
   
   while (choices.length < 3) {
     choices.push(defaults[choices.length]);
@@ -868,5 +864,5 @@ const cleanStoryText = (text: string): string => {
     .replace(/\[[A-Z0-9 _-]{2,}\]/g, "")
     .trim();
 
-  return cleaned || "AM наблюдает за тобой в тишине...";
+  return cleaned || "AM watches you in silence...";
 };

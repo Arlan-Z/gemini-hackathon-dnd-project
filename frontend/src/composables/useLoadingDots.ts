@@ -2,7 +2,7 @@ import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
 
 export const useLoadingDots = (
   isLoading: Ref<boolean>,
-  baseText = 'Обработка',
+  baseText = 'Processing',
   interval = 400
 ) => {
   const frames = [`${baseText}...`, `${baseText}..`, `${baseText}.`, `${baseText}`]
