@@ -9,6 +9,7 @@ import {
 } from "../services/gameService";
 import { generateImage } from "../services/imageService";
 import { actionRequestSchema } from "../models/schemas";
+import type { ChoiceCheckResult, ChoiceOption, ChoicePayload, GameState } from "../models/types";
 
 // Используем объединенный orchestrator с поддержкой Vertex AI и Google AI Studio
 import { processPlayerAction } from "../services/orchestratorService";
@@ -67,8 +68,10 @@ router.post("/action", async (req, res, next) => {
     // Инкрементируем счётчик ходов
     state.turn = (state.turn ?? 0) + 1;
 
+    const choiceCheck = resolveChoiceCheck(state, action);
+
     // Используем оркестратор вместо прямого вызова AI
-    const orchestratorResponse = await processPlayerAction(state, action);
+    const orchestratorResponse = await processPlayerAction(state, action, choiceCheck);
 
     // Генерируем изображение если есть промпт
     let imageUrl: string | null = null;
@@ -107,6 +110,9 @@ router.post("/action", async (req, res, next) => {
       },
     };
 
+    // Update pending choices for deterministic checks on next turn
+    state.pendingChoices = normalizePendingChoices(orchestratorResponse.choices);
+
     // Only update history after successfully preparing the response
     pushHistoryEntry(state, { role: "user", parts: action });
     pushHistoryEntry(state, { role: "model", parts: orchestratorResponse.storyText });
@@ -130,6 +136,53 @@ router.post("/action", async (req, res, next) => {
     next(error);
   }
 });
+
+const normalizePendingChoices = (choices: ChoicePayload[]): ChoiceOption[] => {
+  return choices.map((choice) => {
+    if (typeof choice === "string") {
+      return { text: choice };
+    }
+    return {
+      text: choice.text,
+      type: choice.type,
+      check: choice.check,
+    };
+  });
+};
+
+const resolveChoiceCheck = (
+  state: GameState,
+  action: string
+): ChoiceCheckResult | null => {
+  const pending = state.pendingChoices;
+  if (!pending || pending.length === 0) {
+    return null;
+  }
+
+  const normalizedAction = action.trim();
+  const matched = pending.find(
+    (choice) => choice.text.trim() === normalizedAction
+  );
+  const check = matched?.check;
+  if (!check) {
+    return null;
+  }
+
+  const current = state.stats[check.stat];
+  const required = check.required;
+  const rawChance = required > 0 ? current / required : 1;
+  const chance = Math.max(0, Math.min(1, rawChance));
+  const roll = Math.random();
+
+  return {
+    stat: check.stat,
+    required,
+    current,
+    chance,
+    roll,
+    success: roll <= chance,
+  };
+};
 
 /**
  * Извлекает изменения статов из логов вызовов инструментов

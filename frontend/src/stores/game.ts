@@ -4,9 +4,27 @@ import type { GameState } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:3000/api'
 
-type RawChoice = { text?: unknown; type?: unknown }
+type RawChoice = { text?: unknown; type?: unknown; check?: unknown }
 
 type ImageValue = string | undefined
+
+const normalizeCheck = (
+  value: unknown
+): { stat: 'strength' | 'intelligence' | 'dexterity'; required: number } | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  const raw = value as { stat?: unknown; required?: unknown }
+  const stat =
+    raw.stat === 'strength' || raw.stat === 'intelligence' || raw.stat === 'dexterity'
+      ? raw.stat
+      : undefined
+  const required = typeof raw.required === 'number' ? raw.required : undefined
+  if (!stat || required === undefined) {
+    return undefined
+  }
+  return { stat, required }
+}
 
 const normalizeChoices = (choices: unknown) => {
   if (!Array.isArray(choices)) {
@@ -22,7 +40,8 @@ const normalizeChoices = (choices: unknown) => {
         const raw = choice as RawChoice
         const text = typeof raw.text === 'string' ? raw.text : ''
         const type = raw.type === 'aggressive' || raw.type === 'stealth' ? raw.type : 'action'
-        return text ? { text, type } : null
+        const check = normalizeCheck(raw.check)
+        return text ? { text, type, ...(check ? { check } : {}) } : null
       }
       return null
     })

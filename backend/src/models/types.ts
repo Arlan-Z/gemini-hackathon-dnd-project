@@ -6,6 +6,30 @@ export interface PlayerStats {
   dexterity: number;
 }
 
+export type StatCheckType = "strength" | "intelligence" | "dexterity";
+
+export interface ChoiceCheck {
+  stat: StatCheckType;
+  required: number;
+}
+
+export interface ChoiceCheckResult {
+  stat: StatCheckType;
+  required: number;
+  current: number;
+  chance: number;
+  roll: number;
+  success: boolean;
+}
+
+export interface ChoiceOption {
+  text: string;
+  type?: "action" | "aggressive" | "stealth";
+  check?: ChoiceCheck;
+}
+
+export type ChoicePayload = string | ChoiceOption;
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -34,6 +58,7 @@ export interface GameState {
   currentLocation?: string; // Текущая локация для связности изображений
   locationHistory?: string[]; // История локаций
   environment?: EnvironmentContext; // Детальный контекст окружения
+  pendingChoices?: ChoiceOption[]; // Последние варианты с условиями (серверное состояние)
 }
 
 export interface AIResponse {

@@ -4,7 +4,11 @@ export interface GameState {
   inventory: Array<{ id: string; name: string; description: string; imagePrompt?: string }>
   tags: string[]
   story_text: string
-  choices: Array<{ text: string; type: 'action' | 'aggressive' | 'stealth' }>
+  choices: Array<{
+    text: string
+    type: 'action' | 'aggressive' | 'stealth'
+    check?: { stat: 'strength' | 'intelligence' | 'dexterity'; required: number }
+  }>
   image_prompt: string
   imageUrl?: string
   imageBase64?: string

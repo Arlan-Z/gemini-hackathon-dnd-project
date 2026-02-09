@@ -29,10 +29,28 @@ export const aiResponseSchema = z
   })
   .strict();
 
+const choiceCheckSchema = z
+  .object({
+    stat: z.enum(["strength", "intelligence", "dexterity"]),
+    required: z.number().min(1),
+  })
+  .strict();
+
+const choiceSchema = z.union([
+  z.string().min(1),
+  z
+    .object({
+      text: z.string().min(1),
+      type: z.enum(["action", "aggressive", "stealth"]).optional(),
+      check: choiceCheckSchema.optional(),
+    })
+    .strict(),
+]);
+
 export const orchestratorOutputSchema = z
   .object({
     story_text: z.string().min(1),
-    choices: z.array(z.string().min(1)).length(3),
+    choices: z.array(choiceSchema).length(3),
   })
   .strict();
 

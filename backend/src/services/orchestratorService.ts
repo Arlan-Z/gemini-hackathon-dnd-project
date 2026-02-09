@@ -9,10 +9,11 @@
 
 import { GoogleGenAI, Content, FunctionCallingConfigMode, createPartFromFunctionResponse } from "@google/genai";
 import { config } from "../config";
-import { GameState } from "../models/types";
+import { ChoiceCheckResult, ChoicePayload, GameState } from "../models/types";
 import { orchestratorOutputSchema } from "../models/schemas";
 import { allGameTools } from "../tools/gameTools";
 import { classifyIntent, getOrchestratorHints } from "./routerService";
+import type { RouterResult } from "./routerService";
 import {
   ExecutionContext,
   createExecutionContext,
@@ -237,9 +238,17 @@ Format:
   "choices": ["вариант 1", "вариант 2", "вариант 3"]
 }
 
+Choices MAY be strings OR objects. Use objects only when you need an optional stat check.
+Choice object format:
+{
+  "text": "вариант действия",
+  "check": { "stat": "strength|intelligence|dexterity", "required": 40 }
+}
+
 Rules:
 - "story_text" is the narrative (2-6 sentences), in Russian.
 - "choices" must be exactly 3 items, short, imperative mood, and diverse.
+- "check" is optional. Use it only when a clear stat check is needed.
 - No additional keys.`;
 
 
@@ -292,7 +301,8 @@ Game Over: ${state.isGameOver}`;
 const buildContents = (
   state: GameState,
   userAction: string,
-  routerHints: string
+  routerHints: string,
+  choiceCheckInfo: string
 ): Content[] => {
   const contents: Content[] = [];
 
@@ -311,6 +321,9 @@ PLAYER ACTION: "${userAction}"
 ROUTER HINTS:
 ${routerHints || "none"}
 
+CHOICE CHECK:
+${choiceCheckInfo || "none"}
+
 Analyze this action, use appropriate tools to update game state, then provide the FINAL RESPONSE as strict JSON per system prompt.`;
 
   contents.push({
@@ -321,12 +334,17 @@ Analyze this action, use appropriate tools to update game state, then provide th
   return contents;
 };
 
-const buildRouterHints = async (
+type RouterContext = {
+  hints: string;
+  result: RouterResult | null;
+};
+
+const buildRouterContext = async (
   state: GameState,
   userAction: string
-): Promise<string> => {
+): Promise<RouterContext> => {
   if (!config.geminiApiKey) {
-    return "";
+    return { hints: "", result: null };
   }
 
   try {
@@ -336,11 +354,76 @@ const buildRouterHints = async (
       `Difficulty: ${result.suggestedDifficulty}\n` +
       `Tone: ${result.emotionalTone}\n` +
       `Reasoning: ${result.reasoning}`;
-    return [details, hints].filter(Boolean).join("\n");
+    return { hints: [details, hints].filter(Boolean).join("\n"), result };
   } catch (error) {
     console.warn("[Orchestrator] Router classification failed:", error);
+    return { hints: "", result: null };
+  }
+};
+
+const formatChoiceCheck = (check: ChoiceCheckResult | null) => {
+  if (!check) {
     return "";
   }
+  return [
+    `Stat: ${check.stat}`,
+    `Required: ${check.required}`,
+    `Current: ${check.current}`,
+    `Chance: ${(check.chance * 100).toFixed(0)}%`,
+    `Roll: ${(check.roll * 100).toFixed(0)}%`,
+    `Result: ${check.success ? "SUCCESS" : "FAILURE"}`,
+  ].join("\n");
+};
+
+const adjustStatUpdates = (
+  args: Record<string, unknown>,
+  state: GameState,
+  routerResult: RouterResult | null
+): Record<string, unknown> => {
+  const adjusted = { ...args };
+  const intent = routerResult?.intent ?? "unknown";
+
+  const physicalIntents = new Set<RouterResult["intent"]>([
+    "combat",
+    "escape_attempt",
+  ]);
+  const mentalIntents = new Set<RouterResult["intent"]>([
+    "exploration",
+    "dialogue",
+    "escape_attempt",
+    "rest",
+    "item_use",
+    "unknown",
+  ]);
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, value));
+
+  const adjustNegativeDelta = (delta: number, modifier: number) => {
+    if (delta >= 0) return delta;
+    const adjustedValue = Math.round(delta * (1 - modifier));
+    if (adjustedValue === 0) return -1;
+    return adjustedValue;
+  };
+
+  if (typeof adjusted.hp === "number" && physicalIntents.has(intent)) {
+    const strength = state.stats.strength;
+    const dexterity = state.stats.dexterity;
+    const physicalModifier = clamp(
+      (strength - 5) * 0.04 + (dexterity - 5) * 0.03,
+      -0.3,
+      0.3
+    );
+    adjusted.hp = adjustNegativeDelta(adjusted.hp, physicalModifier);
+  }
+
+  if (typeof adjusted.sanity === "number" && mentalIntents.has(intent)) {
+    const intelligence = state.stats.intelligence;
+    const mentalModifier = clamp((intelligence - 5) * 0.05, -0.25, 0.25);
+    adjusted.sanity = adjustNegativeDelta(adjusted.sanity, mentalModifier);
+  }
+
+  return adjusted;
 };
 
 const getFinalTextFromResponse = (data: any): string => {
@@ -351,7 +434,7 @@ const getFinalTextFromResponse = (data: any): string => {
 
 export interface OrchestratorResponse {
   storyText: string;
-  choices: string[];
+  choices: ChoicePayload[];
   imagePrompt: string | null;
   toolCalls: ExecutionContext["toolCalls"];
   isGameOver: boolean;
@@ -410,15 +493,17 @@ const generateWithRetry = async (
  */
 export const processPlayerAction = async (
   state: GameState,
-  userAction: string
+  userAction: string,
+  choiceCheck: ChoiceCheckResult | null = null
 ): Promise<OrchestratorResponse> => {
-  const routerHints = await buildRouterHints(state, userAction);
+  const routerContext = await buildRouterContext(state, userAction);
+  const choiceCheckInfo = formatChoiceCheck(choiceCheck);
   if (config.useVertexAI && config.vertexAIApiKey) {
     console.log("[Orchestrator] Using Vertex AI with API Key");
-    return processPlayerActionVertexAI(state, userAction, routerHints);
+    return processPlayerActionVertexAI(state, userAction, routerContext, choiceCheckInfo);
   } else if (config.geminiApiKey) {
     console.log("[Orchestrator] Using Google AI Studio");
-    return processPlayerActionGoogleAI(state, userAction, routerHints);
+    return processPlayerActionGoogleAI(state, userAction, routerContext, choiceCheckInfo);
   } else {
     throw new Error("No AI service configured. Set either VERTEX_AI_API_KEY or GEMINI_API_KEY");
   }
@@ -430,7 +515,8 @@ export const processPlayerAction = async (
 const processPlayerActionVertexAI = async (
   state: GameState,
   userAction: string,
-  routerHints: string
+  routerContext: RouterContext,
+  choiceCheckInfo: string
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
@@ -439,7 +525,10 @@ const processPlayerActionVertexAI = async (
 PLAYER ACTION: "${userAction}"
 
 ROUTER HINTS:
-${routerHints || "none"}
+${routerContext.hints || "none"}
+
+CHOICE CHECK:
+${choiceCheckInfo || "none"}
 
 Analyze this action, use appropriate tools to update game state, then provide the FINAL RESPONSE as strict JSON per system prompt.`;
 
@@ -487,7 +576,12 @@ Analyze this action, use appropriate tools to update game state, then provide th
     for (const part of functionCalls) {
       const fc = part.functionCall;
       console.log(`[Orchestrator] Executing: ${fc.name}`);
-      const result = executeTool(ctx, fc.name, fc.args || {});
+      const rawArgs = (fc.args || {}) as Record<string, unknown>;
+      const adjustedArgs =
+        fc.name === "update_player_stats"
+          ? adjustStatUpdates(rawArgs, state, routerContext.result)
+          : rawArgs;
+      const result = executeTool(ctx, fc.name, adjustedArgs);
       functionResponses.push({
         functionResponse: {
           name: fc.name,
@@ -526,12 +620,13 @@ Analyze this action, use appropriate tools to update game state, then provide th
 const processPlayerActionGoogleAI = async (
   state: GameState,
   userAction: string,
-  routerHints: string
+  routerContext: RouterContext,
+  choiceCheckInfo: string
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
   // Построение контекста с подсказками роутера
-  const contents = buildContents(state, userAction, routerHints);
+  const contents = buildContents(state, userAction, routerContext.hints, choiceCheckInfo);
   const baseConfig = {
     temperature: 0.9,
     tools: [{ functionDeclarations: allGameTools }],
@@ -592,7 +687,11 @@ const processPlayerActionGoogleAI = async (
     for (const part of functionCalls) {
       const fc = part.functionCall!;
       const name = fc.name!;
-      const args = (fc.args || {}) as Record<string, unknown>;
+      const rawArgs = (fc.args || {}) as Record<string, unknown>;
+      const args =
+        name === "update_player_stats"
+          ? adjustStatUpdates(rawArgs, state, routerContext.result)
+          : rawArgs;
       
       console.log(`[Orchestrator] Executing tool: ${name}`, args);
       const result = executeTool(ctx, name, args);
@@ -661,7 +760,7 @@ const processPlayerActionGoogleAI = async (
 const parseStructuredOutput = (
   rawText: string,
   logErrors = true
-): { storyText: string; choices: string[] } | null => {
+): { storyText: string; choices: ChoicePayload[] } | null => {
   try {
     const parsed = parseJsonWithCleanup<unknown>(rawText);
     const result = orchestratorOutputSchema.parse(parsed);
