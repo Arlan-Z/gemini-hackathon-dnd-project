@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { config } from "../config";
 import { getNextKey, markKeyRateLimited, markKeyDead } from "../utils/keyPool";
+import { getCachedImageUrl, storeImageInCache } from "./imageCacheService";
 
 const FALLBACK_IMAGE_URL = "https://placehold.co/1024x1024/png?text=AM";
 const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
@@ -123,6 +124,12 @@ export const generateImage = async (prompt: string) => {
     return { imageUrl: fallback };
   }
 
+  const cachedUrl = await getCachedImageUrl(safePrompt);
+  if (cachedUrl) {
+    console.log("[ImageService] Cache hit for prompt");
+    return { imageUrl: cachedUrl };
+  }
+
   let imageUrl: string | null = null;
 
   // Пробуем Vertex AI если включен
@@ -133,6 +140,10 @@ export const generateImage = async (prompt: string) => {
   // Fallback на Google AI Studio
   if (!imageUrl && config.geminiApiKey) {
     imageUrl = await generateImageStudio(safePrompt);
+  }
+
+  if (imageUrl) {
+    await storeImageInCache(safePrompt, imageUrl);
   }
 
   return { imageUrl: imageUrl || fallback };

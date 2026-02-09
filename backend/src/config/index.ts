@@ -53,4 +53,16 @@ export const config = {
     process.env.CONTEXT_CACHE_TTL?.trim() || "3600s",
   contextCacheDisplayName:
     process.env.CONTEXT_CACHE_DISPLAY_NAME?.trim() || "orchestrator-cache",
+
+  // Google Cloud Storage (image cache)
+  imageCacheEnabled: process.env.IMAGE_CACHE_ENABLED !== "false",
+  gcloudProjectId: process.env.GCLOUD_PROJECT_ID ?? "",
+  gcloudClientEmail: process.env.GCLOUD_CLIENT_EMAIL ?? "",
+  gcloudPrivateKey: (process.env.GCLOUD_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
+  gcloudBucket:
+    process.env.GCLOUD_BUCKET?.trim() ||
+    (process.env.GCLOUD_PROJECT_ID
+      ? `${process.env.GCLOUD_PROJECT_ID}-image-cache`
+      : ""),
+  gcloudSignedUrlTtl: process.env.GCLOUD_SIGNED_URL_TTL ?? "3600s",
 };
