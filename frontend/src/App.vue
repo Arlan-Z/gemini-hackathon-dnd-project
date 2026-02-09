@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGameStore } from './stores/game'
 import {
   AlertTriangle,
@@ -122,6 +122,43 @@ const choiceClass = (type: 'action' | 'aggressive' | 'stealth') => {
 
 const formatTag = (tag: string) => tag.replace(/_/g, ' ')
 
+const loadingText = ref('Обработка...')
+const loadingFrames = ['Обработка...', 'Обработка..', 'Обработка.', 'Обработка']
+let loadingTimer: number | undefined
+
+const startLoadingAnimation = () => {
+  if (loadingTimer) {
+    window.clearInterval(loadingTimer)
+  }
+
+  let index = 0
+  loadingText.value = loadingFrames[index]
+  loadingTimer = window.setInterval(() => {
+    index = (index + 1) % loadingFrames.length
+    loadingText.value = loadingFrames[index]
+  }, 400)
+}
+
+const stopLoadingAnimation = () => {
+  if (loadingTimer) {
+    window.clearInterval(loadingTimer)
+  }
+  loadingTimer = undefined
+  loadingText.value = loadingFrames[0]
+}
+
+watch(
+  () => store.loading,
+  (isLoading) => {
+    if (isLoading) {
+      startLoadingAnimation()
+    } else {
+      stopLoadingAnimation()
+    }
+  },
+  { immediate: true }
+)
+
 const chooseAction = async (choiceText: string) => {
   if (store.loading || store.gameState?.isGameOver) {
     return
@@ -134,6 +171,10 @@ onMounted(() => {
   if (!store.gameState && !store.loading) {
     store.startGame()
   }
+})
+
+onBeforeUnmount(() => {
+  stopLoadingAnimation()
 })
 </script>
 
@@ -200,7 +241,7 @@ onMounted(() => {
           <div class="flex items-center justify-between">
             <div class="panel-title">Сводка событий</div>
             <div class="text-xs text-green-300/60">
-              {{ store.loading ? 'Обработка...' : 'Ожидание ввода' }}
+              {{ store.loading ? loadingText : 'Ожидание ввода' }}
             </div>
           </div>
 
