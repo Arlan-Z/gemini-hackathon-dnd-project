@@ -726,19 +726,47 @@ const parseStructuredOutput = (
   rawText: string,
   logErrors = true
 ): { storyText: string; choices: ChoicePayload[] } | null => {
-  try {
-    const parsed = parseJsonWithCleanup<unknown>(rawText);
-    const result = orchestratorOutputSchema.parse(parsed);
-    return {
-      storyText: cleanStoryText(result.story_text),
-      choices: result.choices,
-    };
-  } catch (error) {
-    if (logErrors) {
-      console.warn("[Orchestrator] Structured output parsing failed:", error);
+  const lenientSchema = orchestratorOutputSchema.passthrough();
+
+  const attemptParse = (
+    text: string,
+    depth: number
+  ): { storyText: string; choices: ChoicePayload[] } | null => {
+    try {
+      const parsed = parseJsonWithCleanup<unknown>(text);
+
+      const strictResult = orchestratorOutputSchema.safeParse(parsed);
+      if (strictResult.success) {
+        return {
+          storyText: cleanStoryText(strictResult.data.story_text),
+          choices: strictResult.data.choices,
+        };
+      }
+
+      const lenientResult = lenientSchema.safeParse(parsed);
+      if (lenientResult.success) {
+        return {
+          storyText: cleanStoryText(lenientResult.data.story_text),
+          choices: lenientResult.data.choices,
+        };
+      }
+
+      if (typeof parsed === "string" && depth < 1) {
+        const trimmed = parsed.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          return attemptParse(trimmed, depth + 1);
+        }
+      }
+    } catch (error) {
+      if (logErrors) {
+        console.warn("[Orchestrator] Structured output parsing failed:", error);
+      }
     }
+
     return null;
-  }
+  };
+
+  return attemptParse(rawText, 0);
 };
 
 const buildResponse = (
