@@ -46,4 +46,11 @@ export const config = {
   geminiImageModel: process.env.GEMINI_IMAGE_GEN_MODEL ?? "imagen-3.0-generate-001",
   
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
+
+  // Context cache (Gemini Developer API only in this project)
+  contextCacheEnabled: process.env.CONTEXT_CACHE_ENABLED !== "false",
+  contextCacheTtl:
+    process.env.CONTEXT_CACHE_TTL?.trim() || "3600s",
+  contextCacheDisplayName:
+    process.env.CONTEXT_CACHE_DISPLAY_NAME?.trim() || "orchestrator-cache",
 };

@@ -1,9 +1,9 @@
 export interface PlayerStats {
   hp: number;
   sanity: number;
-  str: number;
-  int: number;
-  dex: number;
+  strength: number;
+  intelligence: number;
+  dexterity: number;
 }
 
 export interface InventoryItem {

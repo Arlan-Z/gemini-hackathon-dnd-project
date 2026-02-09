@@ -71,19 +71,19 @@ export const executeUpdatePlayerStats = (
     changes.push(`Sanity: ${oldSanity} -> ${state.stats.sanity}`);
   }
 
-  if (typeof args.str === "number") {
-    state.stats.str += args.str;
-    changes.push(`STR changed by ${args.str}`);
+  if (typeof args.strength === "number") {
+    state.stats.strength += args.strength;
+    changes.push(`Strength changed by ${args.strength}`);
   }
 
-  if (typeof args.int === "number") {
-    state.stats.int += args.int;
-    changes.push(`INT changed by ${args.int}`);
+  if (typeof args.intelligence === "number") {
+    state.stats.intelligence += args.intelligence;
+    changes.push(`Intelligence changed by ${args.intelligence}`);
   }
 
-  if (typeof args.dex === "number") {
-    state.stats.dex += args.dex;
-    changes.push(`DEX changed by ${args.dex}`);
+  if (typeof args.dexterity === "number") {
+    state.stats.dexterity += args.dexterity;
+    changes.push(`Dexterity changed by ${args.dexterity}`);
   }
 
   const reason = args.reason as string || "unknown";

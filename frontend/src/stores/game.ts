@@ -58,8 +58,9 @@ const normalizeGameState = (payload: any): GameState => {
   const stats = {
     hp: rawStats.hp ?? 0,
     sanity: rawStats.sanity ?? 0,
-    strength: rawStats.strength ?? rawStats.str ?? 0,
-    intelligence: rawStats.intelligence ?? rawStats.int ?? 0
+    strength: rawStats.strength ?? 0,
+    intelligence: rawStats.intelligence ?? 0,
+    dexterity: rawStats.dexterity ?? 0
   }
 
   const inventory = Array.isArray(rawState.inventory)

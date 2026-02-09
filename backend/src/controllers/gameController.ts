@@ -158,19 +158,23 @@ const extractStatUpdates = (
         continue;
       }
 
-      const { hp, sanity, str, int, dex } = source as {
+      const { hp, sanity, strength, intelligence, dexterity } = source as {
         hp?: unknown;
         sanity?: unknown;
-        str?: unknown;
-        int?: unknown;
-        dex?: unknown;
+        strength?: unknown;
+        intelligence?: unknown;
+        dexterity?: unknown;
       };
 
       if (typeof hp === "number") updates.hp = (updates.hp || 0) + hp;
       if (typeof sanity === "number") updates.sanity = (updates.sanity || 0) + sanity;
-      if (typeof str === "number") updates.str = (updates.str || 0) + str;
-      if (typeof int === "number") updates.int = (updates.int || 0) + int;
-      if (typeof dex === "number") updates.dex = (updates.dex || 0) + dex;
+      if (typeof strength === "number") updates.strength = (updates.strength || 0) + strength;
+      if (typeof intelligence === "number") {
+        updates.intelligence = (updates.intelligence || 0) + intelligence;
+      }
+      if (typeof dexterity === "number") {
+        updates.dexterity = (updates.dexterity || 0) + dexterity;
+      }
     }
   }
 

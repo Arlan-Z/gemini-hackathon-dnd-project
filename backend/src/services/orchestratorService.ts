@@ -2,7 +2,7 @@
  * Orchestrator Service - Агентская оркестрация с Gemini Function Calling
  * 
  * Оптимизированная версия:
- * - Убран отдельный router (classifyIntent) — экономим 1 API-вызов на ход
+ * - Router (classifyIntent) для подсказок оркестратору
  * - Key pool с round-robin ротацией
  * - Retry с backoff на 429
  */
@@ -10,16 +10,121 @@
 import { GoogleGenAI, Content, FunctionCallingConfigMode, createPartFromFunctionResponse } from "@google/genai";
 import { config } from "../config";
 import { GameState } from "../models/types";
+import { orchestratorOutputSchema } from "../models/schemas";
 import { allGameTools } from "../tools/gameTools";
+import { classifyIntent, getOrchestratorHints } from "./routerService";
 import {
   ExecutionContext,
   createExecutionContext,
   executeTool,
 } from "../tools/toolExecutor";
 import { getNextKey } from "../utils/keyPool";
+import { parseJsonWithCleanup } from "../utils/jsonParser";
 import { withRetry } from "../utils/retry";
 
 const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
+
+const ORCHESTRATOR_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    story_text: { type: "string" },
+    choices: {
+      type: "array",
+      items: { type: "string" },
+      minItems: 3,
+      maxItems: 3,
+    },
+  },
+  required: ["story_text", "choices"],
+  additionalProperties: false,
+};
+
+type CacheEntry = {
+  name: string;
+  expiresAt?: number;
+};
+
+const orchestratorCacheByKey = new Map<string, CacheEntry>();
+const orchestratorCacheInFlight = new Map<string, Promise<CacheEntry | null>>();
+const cacheDisabledForKey = new Set<string>();
+
+const parseExpireTime = (value?: string) => {
+  if (!value) {
+    return undefined;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+};
+
+const isCacheValid = (entry: CacheEntry) => {
+  if (!entry.expiresAt) {
+    return true;
+  }
+  // Avoid edge case where cache expires mid-request
+  return Date.now() + 15_000 < entry.expiresAt;
+};
+
+const getOrchestratorCachedContent = async (
+  ai: GoogleGenAI,
+  apiKey: string
+): Promise<string | null> => {
+  if (!config.contextCacheEnabled) {
+    return null;
+  }
+  if (!apiKey) {
+    return null;
+  }
+  if (cacheDisabledForKey.has(apiKey)) {
+    return null;
+  }
+
+  const existing = orchestratorCacheByKey.get(apiKey);
+  if (existing && isCacheValid(existing)) {
+    return existing.name;
+  }
+
+  const inFlight = orchestratorCacheInFlight.get(apiKey);
+  if (inFlight) {
+    const entry = await inFlight;
+    return entry?.name ?? null;
+  }
+
+  const createPromise = (async () => {
+    try {
+      const cached = await ai.caches.create({
+        model: config.geminiModel,
+        config: {
+          displayName: config.contextCacheDisplayName,
+          ttl: config.contextCacheTtl,
+          systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
+        },
+      });
+
+      if (!cached?.name) {
+        throw new Error("Cache creation returned no name");
+      }
+
+      const entry: CacheEntry = {
+        name: cached.name,
+        expiresAt: parseExpireTime(cached.expireTime),
+      };
+      orchestratorCacheByKey.set(apiKey, entry);
+      return entry;
+    } catch (error) {
+      console.warn("[Orchestrator] Context cache unavailable, disabling for key:", error);
+      cacheDisabledForKey.add(apiKey);
+      return null;
+    }
+  })();
+
+  orchestratorCacheInFlight.set(apiKey, createPromise);
+  try {
+    const entry = await createPromise;
+    return entry?.name ?? null;
+  } finally {
+    orchestratorCacheInFlight.delete(apiKey);
+  }
+};
 
 const ORCHESTRATOR_SYSTEM_PROMPT = `You are AM (Allied Mastercomputer) - a sadistic superintelligent AI from "I Have No Mouth, and I Must Scream".
 
@@ -125,15 +230,17 @@ PERSONALITY:
 - Occasionally shows twisted "mercy" to give false hope
 - Makes the environment itself hostile
 
-After using tools, provide a narrative response in Russian that:
-1. Describes what happened dramatically
-2. Reflects the tool results naturally in the story
-3. Ends with exactly 3 choices for the player (short, imperative mood)
+After using tools, respond with STRICT JSON ONLY (no Markdown, no extra text).
+Format:
+{
+  "story_text": "описание сцены на русском",
+  "choices": ["вариант 1", "вариант 2", "вариант 3"]
+}
 
-FORMAT YOUR CHOICES AS:
-1. [первый вариант]
-2. [второй вариант]
-3. [третий вариант]`;
+Rules:
+- "story_text" is the narrative (2-6 sentences), in Russian.
+- "choices" must be exactly 3 items, short, imperative mood, and diverse.
+- No additional keys.`;
 
 
 const formatHistory = (state: GameState, maxEntries = 8) => {
@@ -170,7 +277,7 @@ const formatGameState = (state: GameState): string => {
 Turn: ${state.turn ?? 0}
 HP: ${state.stats.hp}/100
 Sanity: ${state.stats.sanity}/100
-STR: ${state.stats.str} | INT: ${state.stats.int} | DEX: ${state.stats.dex}
+Strength: ${state.stats.strength} | Intelligence: ${state.stats.intelligence} | Dexterity: ${state.stats.dexterity}
 Inventory: ${inventory}
 Active Tags: ${tags}
 Current Location: ${currentLocation}
@@ -182,7 +289,11 @@ Game Over: ${state.isGameOver}`;
 /**
  * Конвертирует историю в формат Gemini Content
  */
-const buildContents = (state: GameState, userAction: string): Content[] => {
+const buildContents = (
+  state: GameState,
+  userAction: string,
+  routerHints: string
+): Content[] => {
   const contents: Content[] = [];
 
   // Добавляем историю (последние 8 записей)
@@ -197,7 +308,10 @@ const buildContents = (state: GameState, userAction: string): Content[] => {
 
 PLAYER ACTION: "${userAction}"
 
-Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
+ROUTER HINTS:
+${routerHints || "none"}
+
+Analyze this action, use appropriate tools to update game state, then provide the FINAL RESPONSE as strict JSON per system prompt.`;
 
   contents.push({
     role: "user",
@@ -205,6 +319,34 @@ Analyze this action, use appropriate tools to update game state, then provide na
   });
 
   return contents;
+};
+
+const buildRouterHints = async (
+  state: GameState,
+  userAction: string
+): Promise<string> => {
+  if (!config.geminiApiKey) {
+    return "";
+  }
+
+  try {
+    const result = await classifyIntent(state, userAction);
+    const hints = getOrchestratorHints(result);
+    const details = `Intent: ${result.intent} (confidence: ${result.confidence.toFixed(2)})\n` +
+      `Difficulty: ${result.suggestedDifficulty}\n` +
+      `Tone: ${result.emotionalTone}\n` +
+      `Reasoning: ${result.reasoning}`;
+    return [details, hints].filter(Boolean).join("\n");
+  } catch (error) {
+    console.warn("[Orchestrator] Router classification failed:", error);
+    return "";
+  }
+};
+
+const getFinalTextFromResponse = (data: any): string => {
+  const finalCandidate = data.candidates?.[0];
+  const textParts = finalCandidate?.content?.parts?.filter((part: any) => part.text) || [];
+  return textParts.map((part: any) => part.text).join("\n") || "";
 };
 
 export interface OrchestratorResponse {
@@ -229,14 +371,24 @@ const getAIClient = (): { ai: GoogleGenAI; apiKey: string } => {
  * Вызов generateContent с retry и key rotation.
  * При невалидном ключе — помечает его мёртвым и ретраит с новым.
  */
+type GenerateParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
+type GenerateParamsFactory = (
+  ai: GoogleGenAI,
+  apiKey: string
+) => Promise<GenerateParams> | GenerateParams;
+
 const generateWithRetry = async (
-  params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
+  paramsOrFactory: GenerateParams | GenerateParamsFactory,
   label: string,
   maxKeyRetries = 3,
 ) => {
   for (let keyAttempt = 0; keyAttempt < maxKeyRetries; keyAttempt++) {
     const { ai, apiKey } = getAIClient();
     try {
+      const params =
+        typeof paramsOrFactory === "function"
+          ? await paramsOrFactory(ai, apiKey)
+          : paramsOrFactory;
       return await withRetry(
         () => ai.models.generateContent(params),
         { maxRetries: 2, label, apiKey },
@@ -260,12 +412,13 @@ export const processPlayerAction = async (
   state: GameState,
   userAction: string
 ): Promise<OrchestratorResponse> => {
+  const routerHints = await buildRouterHints(state, userAction);
   if (config.useVertexAI && config.vertexAIApiKey) {
     console.log("[Orchestrator] Using Vertex AI with API Key");
-    return processPlayerActionVertexAI(state, userAction);
+    return processPlayerActionVertexAI(state, userAction, routerHints);
   } else if (config.geminiApiKey) {
     console.log("[Orchestrator] Using Google AI Studio");
-    return processPlayerActionGoogleAI(state, userAction);
+    return processPlayerActionGoogleAI(state, userAction, routerHints);
   } else {
     throw new Error("No AI service configured. Set either VERTEX_AI_API_KEY or GEMINI_API_KEY");
   }
@@ -276,7 +429,8 @@ export const processPlayerAction = async (
  */
 const processPlayerActionVertexAI = async (
   state: GameState,
-  userAction: string
+  userAction: string,
+  routerHints: string
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
@@ -284,7 +438,10 @@ const processPlayerActionVertexAI = async (
 
 PLAYER ACTION: "${userAction}"
 
-Analyze this action, use appropriate tools to update game state, then provide narrative response with 3 choices.`;
+ROUTER HINTS:
+${routerHints || "none"}
+
+Analyze this action, use appropriate tools to update game state, then provide the FINAL RESPONSE as strict JSON per system prompt.`;
 
   const url = `${VERTEX_AI_BASE_URL}/publishers/google/models/${config.geminiModel}:generateContent?key=${config.vertexAIApiKey}`;
   const history = formatHistory(state);
@@ -368,15 +525,14 @@ Analyze this action, use appropriate tools to update game state, then provide na
  */
 const processPlayerActionGoogleAI = async (
   state: GameState,
-  userAction: string
+  userAction: string,
+  routerHints: string
 ): Promise<OrchestratorResponse> => {
   const ctx = createExecutionContext(state);
 
-  // Построение контекста (без отдельного router — экономим 1 вызов)
-  const contents = buildContents(state, userAction);
-
-  const geminiConfig = {
-    systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT,
+  // Построение контекста с подсказками роутера
+  const contents = buildContents(state, userAction, routerHints);
+  const baseConfig = {
     temperature: 0.9,
     tools: [{ functionDeclarations: allGameTools }],
     toolConfig: {
@@ -386,9 +542,34 @@ const processPlayerActionGoogleAI = async (
     },
   };
 
+  const buildGeminiConfig = async (ai: GoogleGenAI, apiKey: string) => {
+    const cachedContent = await getOrchestratorCachedContent(ai, apiKey);
+    if (cachedContent) {
+      return { ...baseConfig, cachedContent };
+    }
+    return { ...baseConfig, systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT };
+  };
+
+  const buildFinalGeminiConfig = async (ai: GoogleGenAI, apiKey: string) => {
+    const cachedContent = await getOrchestratorCachedContent(ai, apiKey);
+    const finalConfig = {
+      temperature: 0.7,
+      responseMimeType: "application/json",
+      responseJsonSchema: ORCHESTRATOR_RESPONSE_SCHEMA,
+    };
+    if (cachedContent) {
+      return { ...finalConfig, cachedContent };
+    }
+    return { ...finalConfig, systemInstruction: ORCHESTRATOR_SYSTEM_PROMPT };
+  };
+
   // Первый вызов с retry
   let response = await generateWithRetry(
-    { model: config.geminiModel, contents, config: geminiConfig },
+    async (ai, apiKey) => ({
+      model: config.geminiModel,
+      contents,
+      config: await buildGeminiConfig(ai, apiKey),
+    }),
     "Orchestrator:initial",
   );
 
@@ -438,7 +619,11 @@ const processPlayerActionGoogleAI = async (
 
     // Следующая итерация с retry
     response = await generateWithRetry(
-      { model: config.geminiModel, contents, config: geminiConfig },
+      async (ai, apiKey) => ({
+        model: config.geminiModel,
+        contents,
+        config: await buildGeminiConfig(ai, apiKey),
+      }),
       `Orchestrator:loop-${iterations}`,
     );
   }
@@ -447,8 +632,49 @@ const processPlayerActionGoogleAI = async (
     console.warn(`[Orchestrator] Max iterations limit reached (${maxIterations}).`);
   }
 
+  const initialText = getFinalTextFromResponse(response);
+  const structured = parseStructuredOutput(initialText, false);
+  if (!structured) {
+    const finalContents = contents.concat({
+      role: "user",
+      parts: [
+        {
+          text: "Provide the final response as STRICT JSON only per system prompt. Do not call tools.",
+        },
+      ],
+    });
+
+    response = await generateWithRetry(
+      async (ai, apiKey) => ({
+        model: config.geminiModel,
+        contents: finalContents,
+        config: await buildFinalGeminiConfig(ai, apiKey),
+      }),
+      "Orchestrator:final",
+    );
+  }
+
   // Use buildResponse for consistent handling
   return buildResponse(response, ctx, state);
+};
+
+const parseStructuredOutput = (
+  rawText: string,
+  logErrors = true
+): { storyText: string; choices: string[] } | null => {
+  try {
+    const parsed = parseJsonWithCleanup<unknown>(rawText);
+    const result = orchestratorOutputSchema.parse(parsed);
+    return {
+      storyText: cleanStoryText(result.story_text),
+      choices: result.choices,
+    };
+  } catch (error) {
+    if (logErrors) {
+      console.warn("[Orchestrator] Structured output parsing failed:", error);
+    }
+    return null;
+  }
 };
 
 /**
@@ -459,11 +685,11 @@ const buildResponse = (
   ctx: ExecutionContext,
   state: GameState
 ): OrchestratorResponse => {
-  const finalCandidate = data.candidates?.[0];
-  const textParts = finalCandidate?.content?.parts?.filter((part: any) => part.text) || [];
-  const finalText = textParts.map((part: any) => part.text).join("\n") || "AM молчит...";
+  const finalText = getFinalTextFromResponse(data) || "AM молчит...";
 
-  const choices = extractChoices(finalText);
+  const structured = parseStructuredOutput(finalText);
+  const storyText = structured?.storyText ?? cleanStoryText(finalText);
+  const choices = structured?.choices ?? extractChoices(finalText);
 
   if (!ctx.gameOverTriggered) {
     if (state.stats.hp <= 0) {
@@ -478,7 +704,7 @@ const buildResponse = (
   }
 
   return {
-    storyText: cleanStoryText(finalText),
+    storyText,
     choices,
     imagePrompt: ctx.imagePrompt,
     toolCalls: ctx.toolCalls,

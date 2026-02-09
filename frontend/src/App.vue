@@ -9,7 +9,8 @@ import {
   Radio,
   Skull,
   Sword,
-  Eye
+  Eye,
+  Crosshair
 } from 'lucide-vue-next'
 
 const store = useGameStore()
@@ -98,6 +99,13 @@ const stats = computed(() => {
       value: values.intelligence,
       icon: Eye,
       color: 'text-cyan-200'
+    },
+    {
+      key: 'dexterity',
+      label: 'Dexterity',
+      value: values.dexterity,
+      icon: Crosshair,
+      color: 'text-sky-300'
     }
   ]
 })
@@ -163,6 +171,10 @@ onMounted(() => {
                 <div class="stat-bar">
                   <span :style="{ width: `${statPercent(stat.value)}%` }"></span>
                 </div>
+                <div
+                  v-if="stat.key === 'sanity' || stat.key === 'dexterity'"
+                  class="stat-divider"
+                ></div>
               </div>
             </div>
           </div>

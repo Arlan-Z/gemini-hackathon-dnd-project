@@ -54,9 +54,9 @@ const formatState = (state: GameState) => {
   return [
     `HP: ${state.stats.hp}`,
     `Sanity: ${state.stats.sanity}`,
-    `Str: ${state.stats.str}`,
-    `Int: ${state.stats.int}`,
-    `Dex: ${state.stats.dex}`,
+    `Strength: ${state.stats.strength}`,
+    `Intelligence: ${state.stats.intelligence}`,
+    `Dexterity: ${state.stats.dexterity}`,
     `Inventory: ${inventory}`,
     `Tags: ${tags}`,
   ].join("\n");
@@ -67,7 +67,7 @@ const buildPrompt = (state: GameState, userAction: string) => `
 Формат ответа (никаких дополнительных ключей):
 {
   "story_text": "описание сцены на русском",
-  "stat_updates": { "hp": -10, "sanity": -5, "str": 0, "int": 0, "dex": 0 },
+  "stat_updates": { "hp": -10, "sanity": -5, "strength": 0, "intelligence": 0, "dexterity": 0 },
   "choices": ["вариант 1", "вариант 2", "вариант 3"],
   "image_prompt": "english scene description"
 }

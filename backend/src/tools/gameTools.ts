@@ -28,15 +28,15 @@ Use this when:
         type: Type.NUMBER,
         description: "Sanity change. Negative for horror/stress, positive for calm. Range: -50 to +20",
       },
-      str: {
+      strength: {
         type: Type.NUMBER,
         description: "Strength change. Usually -2 to +2",
       },
-      int: {
+      intelligence: {
         type: Type.NUMBER,
         description: "Intelligence change. Usually -2 to +2",
       },
-      dex: {
+      dexterity: {
         type: Type.NUMBER,
         description: "Dexterity change. Usually -2 to +2",
       },

@@ -19,9 +19,9 @@ const DEATH_TEXT =
 const DEFAULT_STATS: PlayerStats = {
   hp: 100,
   sanity: 100,
-  str: 5,
-  int: 5,
-  dex: 5,
+  strength: 5,
+  intelligence: 5,
+  dexterity: 5,
 };
 
 const sessions = new Map<string, GameState>();
@@ -71,14 +71,14 @@ const applyStatUpdates = (stats: PlayerStats, updates: Partial<PlayerStats>) => 
   if (updates.sanity !== undefined) {
     stats.sanity = clampStat(stats.sanity + updates.sanity);
   }
-  if (updates.str !== undefined) {
-    stats.str = stats.str + updates.str;
+  if (updates.strength !== undefined) {
+    stats.strength = stats.strength + updates.strength;
   }
-  if (updates.int !== undefined) {
-    stats.int = stats.int + updates.int;
+  if (updates.intelligence !== undefined) {
+    stats.intelligence = stats.intelligence + updates.intelligence;
   }
-  if (updates.dex !== undefined) {
-    stats.dex = stats.dex + updates.dex;
+  if (updates.dexterity !== undefined) {
+    stats.dexterity = stats.dexterity + updates.dexterity;
   }
 };
 

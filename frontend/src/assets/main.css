@@ -26,6 +26,9 @@
   .stat-bar > span {
     @apply block h-full bg-green-400/70;
   }
+  .stat-divider {
+    @apply h-px w-full bg-green-500/30 my-2;
+  }
   .tag {
     @apply px-2 py-1 text-[10px] uppercase tracking-[0.2em] border border-green-500/40 text-green-300/80;
   }

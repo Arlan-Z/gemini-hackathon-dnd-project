@@ -4,9 +4,9 @@ export const playerStatsSchema = z
   .object({
     hp: z.number(),
     sanity: z.number(),
-    str: z.number(),
-    int: z.number(),
-    dex: z.number(),
+    strength: z.number(),
+    intelligence: z.number(),
+    dexterity: z.number(),
   })
   .strict();
 
@@ -14,9 +14,9 @@ export const statUpdatesSchema = z
   .object({
     hp: z.number().optional(),
     sanity: z.number().optional(),
-    str: z.number().optional(),
-    int: z.number().optional(),
-    dex: z.number().optional(),
+    strength: z.number().optional(),
+    intelligence: z.number().optional(),
+    dexterity: z.number().optional(),
   })
   .strict();
 
@@ -26,6 +26,13 @@ export const aiResponseSchema = z
     stat_updates: statUpdatesSchema,
     choices: z.array(z.string().min(1)).length(3),
     image_prompt: z.string().min(1),
+  })
+  .strict();
+
+export const orchestratorOutputSchema = z
+  .object({
+    story_text: z.string().min(1),
+    choices: z.array(z.string().min(1)).length(3),
   })
   .strict();
 

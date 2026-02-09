@@ -228,7 +228,7 @@ export const getOrchestratorHints = (result: RouterResult): string => {
       break;
     case "combat":
       hints.push("Combat scenario. Calculate damage based on player stats and enemy strength.");
-      hints.push("Consider player's STR and DEX for combat effectiveness.");
+      hints.push("Consider player's Strength and Dexterity for combat effectiveness.");
       break;
     case "escape_attempt":
       hints.push("Player trying to escape. AM should mock this futile attempt.");
