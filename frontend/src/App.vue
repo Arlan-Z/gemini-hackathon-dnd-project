@@ -112,6 +112,8 @@ const choiceClass = (type: 'action' | 'aggressive' | 'stealth') => {
   return 'action-neutral'
 }
 
+const formatTag = (tag: string) => tag.replace(/_/g, ' ')
+
 const chooseAction = async (choiceText: string) => {
   if (store.loading || store.gameState?.isGameOver) {
     return
@@ -172,7 +174,7 @@ onMounted(() => {
                 Аномалий нет
               </span>
               <span v-for="tag in store.gameState?.tags" :key="tag" class="tag">
-                {{ tag }}
+                {{ formatTag(tag) }}
               </span>
             </div>
           </div>
