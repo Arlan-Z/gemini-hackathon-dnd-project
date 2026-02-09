@@ -20,6 +20,8 @@ export interface RouterResult {
   emotionalTone: "neutral" | "aggressive" | "fearful" | "desperate" | "cunning";
 }
 
+const VERTEX_AI_BASE_URL = "https://aiplatform.googleapis.com/v1";
+
 let genAI: GoogleGenAI | null = null;
 
 const getGenAI = (): GoogleGenAI => {
@@ -96,8 +98,6 @@ export const classifyIntent = async (
   state: GameState,
   userAction: string
 ): Promise<RouterResult> => {
-  const ai = getGenAI();
-
   const contextInfo = `
 Player Stats: HP=${state.stats.hp}, Sanity=${state.stats.sanity}
 Inventory: ${state.inventory.map(i => i.name).join(", ") || "empty"}
@@ -105,23 +105,55 @@ Active Tags: ${state.tags.join(", ") || "none"}
 Game Over: ${state.isGameOver}`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: config.geminiModel,
-      contents: [{
-        role: "user",
-        parts: [{
-          text: `${contextInfo}\n\nPlayer Action: "${userAction}"\n\nClassify this action.`,
-        }],
-      }],
-      config: {
-        systemInstruction: ROUTER_SYSTEM_PROMPT,
-        temperature: 0.3,
-        tools: [{ functionDeclarations: [routerFunctionDeclaration] }],
-      },
-    });
+    let candidate: any;
 
-    const candidate = response.candidates?.[0];
-    const functionCall = candidate?.content?.parts?.find(p => p.functionCall)?.functionCall;
+    if (config.useVertexAI && config.vertexAIApiKey) {
+      const url = `${VERTEX_AI_BASE_URL}/publishers/google/models/${config.geminiModel}:generateContent?key=${config.vertexAIApiKey}`;
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `${contextInfo}\n\nPlayer Action: "${userAction}"\n\nClassify this action.`,
+            }],
+          }],
+          systemInstruction: { parts: [{ text: ROUTER_SYSTEM_PROMPT }] },
+          tools: [{ functionDeclarations: [routerFunctionDeclaration] }],
+          generationConfig: { temperature: 0.3 },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Vertex AI error (${response.status}): ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      candidate = data.candidates?.[0];
+    } else if (config.geminiApiKey) {
+      const ai = getGenAI();
+      const response = await ai.models.generateContent({
+        model: config.geminiModel,
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `${contextInfo}\n\nPlayer Action: "${userAction}"\n\nClassify this action.`,
+          }],
+        }],
+        config: {
+          systemInstruction: ROUTER_SYSTEM_PROMPT,
+          temperature: 0.3,
+          tools: [{ functionDeclarations: [routerFunctionDeclaration] }],
+        },
+      });
+      candidate = response.candidates?.[0];
+    } else {
+      throw new Error("No AI service configured");
+    }
+
+    const functionCall = candidate?.content?.parts?.find((p: any) => p.functionCall)?.functionCall;
 
     if (functionCall?.args) {
       const args = functionCall.args as Record<string, unknown>;
